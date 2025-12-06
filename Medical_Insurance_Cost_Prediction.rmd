@@ -1,0 +1,770 @@
+---
+title: "Medical Insurance Cost Prediction"
+author: 'SL group 6'
+date: "2025-12-03"
+output:
+  pdf_document:
+    latex_engine: xelatex
+mainfont: "Microsoft YaHei"
+header-includes:
+  - \usepackage{xeCJK}
+  - \setCJKmainfont{Microsoft YaHei}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Introduction
+### 1.1 Problem Definition
+### 1.2 About Dataset
+This dataset provides information about 100,000 individuals including their demographics, socioeconomic status, health conditions, lifestyle factors, Insurance plans, and medical expenditures.
+
+In detail, the columns are:
+
+1. Demographics & Socioeconomic:
+person_id, age, sex, region, urban_rural, income, education, marital_status, employment_status, household_size, dependents
+
+2. Lifestyle & Habits:
+bmi, smoker, alcohol_freq, exercise_frequency, sleep_hours, stress_level
+
+3. Health & Clinical:
+hypertension, diabetes, copd, cardiovascular, cancer_history, kidney_disease, liver_disease, arthritis, mental_health, chronic_count, systolic_bp, diastolic_bp, ldl, hba1c, risk_score, is_high_risk
+
+4. Healthcare Utilization & Procedures:
+visits_last_year, hospitalizations_last_3yrs, days_hospitalized_last_3yrs, medication_count, proc_imaging, proc_surgery, proc_psycho, proc_consult_count, proc_lab, had_major
+
+5. Insurance & Policy:
+plan_type, network_tier, deductible, copay, policy_term_years, policy_changes_last_2yrs, provider_quality
+
+6. Medical Costs & Claims:
+annual_medical_cost, annual_premium, monthly_premium, claims_count, avg_claim_amount, total_claims_paid
+
+
+## 2. Exploratory Data Analysis (EDA)
+
+- Libraries
+```{r,warning=FALSE,message=FALSE}
+# ============================
+# Load libraries
+# ============================
+
+#install.packages("caret")
+library(glmnet)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(ggforce)
+library(gridExtra)
+library(reshape2)
+library(GGally)
+library(corrplot)
+library(e1071)
+library(rpart)
+library(rpart.plot)
+library(tree)
+library(randomForest)
+library(caret)
+library(xgboost)
+library(Matrix)
+library(caTools)
+```
+
+### 2.1. Load and Inspect the dataset
+```{r}
+# ============================
+# Load and inspect the dataset
+# ============================
+
+# Load dataset
+Insurance <- read.csv("medical_insurance.csv", stringsAsFactors = FALSE)
+
+# Quick structure and preview
+str(Insurance)          # Check variable types
+head(Insurance)         # Preview first few rows
+summary(Insurance)      # Summary statistics
+
+# ============================
+# Check and handle missing values
+# ============================
+
+# Count missing values in each column
+na_counts <- sum(is.na(Insurance))
+na_counts 
+
+# Count how many rows have at least one missing value
+missing_rows <- sum(!complete.cases(Insurance))
+missing_rows
+
+```
+
+### 2.2. Univariate Analysis
+```{r}
+# ============================
+# Univariate Analysis
+# ============================
+
+Insurance_view <- Insurance
+
+# convert 0/1 columns to factors
+#discrete_cols <- c("hypertension", "diabetes", "asthma", "copd", "cardiovascular_disease", "cancer_history", "kidney_disease", "liver_disease", "arthritis", "mental_health", "is_high_risk", "had_major_procedure")
+discrete_cols <- c()
+#Insurance_view[discrete_cols] <- lapply(Insurance_view[discrete_cols], factor)
+
+
+# Convert all character columns to factors
+for (v in names(Insurance_view)) {
+  if (is.character(Insurance_view[[v]])) {
+    Insurance_view[[v]] <- factor(Insurance_view[[v]])
+  }
+}
+
+
+num_cols <- names(Insurance_view)[sapply(Insurance_view, is.numeric)]
+cat_cols <- names(Insurance_view)[sapply(Insurance_view, is.factor)]
+
+plot_list <- list()
+
+# ---- Numeric Variable: Histograms ----
+for (v in num_cols) {
+  p <- ggplot(Insurance_view, aes(x = .data[[v]])) + 
+    geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "steelblue", alpha = 0.7) +
+    theme(axis.text.x = element_text(size = 4)) +
+
+    theme_minimal()
+
+  plot_list[[v]] <- p
+}
+
+# ---- Category Variable: Barplots ----
+for (v in cat_cols) {
+  p <- ggplot(Insurance_view, aes(x = .data[[v]])) + 
+    geom_bar(fill = "lightgreen", color = "black") +
+    geom_text(stat='count', aes(label = after_stat(count)), vjust = -0.5, size = 2) +
+    theme(axis.text.x = element_text(size = 6,angle = 45, hjust = 1)) +
+    theme_minimal()
+  
+  plot_list[[v]] <- p
+}
+
+plot_row <- 2
+plot_col <- 2
+plot_total <- plot_col*plot_row
+num_plot <- length(plot_list)
+num_pages <- floor(num_plot / plot_total)
+
+for (page in 1:num_pages) {
+  beg <- (page-1) * plot_total + 1; end <- page * plot_total
+  grid.arrange(grobs = plot_list[beg:end], 
+               ncol = plot_col, nrow = plot_row)
+  if (page == num_pages && num_plot %% plot_total > 0) {
+    grid.arrange(grobs = plot_list[(end+1):num_plot], ncol = plot_col)
+  }
+}
+
+
+
+
+```
+
+### 2.3. Bivariate Analysis
+
+```{r}
+# ============================
+# Bivariate Analysis
+# ============================
+
+# ---- Feature Correlation ----
+
+
+# compute correlation coefficients of "annual_medical_cost" to other features
+cor_results <- sapply(c(num_cols, discrete_cols), function(v) {
+  cor(Insurance[[v]], 
+      Insurance$charges, use = "complete.obs")
+})
+
+cor_table <- data.frame(
+  feature = names(cor_results),
+  corr = as.numeric(cor_results)
+)
+
+# Sorting by "abs(corr)"
+cor_table <- cor_table[order(abs(cor_table$corr), decreasing = TRUE), ]
+
+# correlation coefficients table
+cor_table
+
+
+# ---- Correlation Heatmap ----
+#top20_feature <- cor_table[1:20, ]$feature
+
+
+corr_mat <- cor(Insurance[cor_table$feature], use = "complete.obs")
+
+corrplot(corr_mat, method = "color",
+         tl.cex = 0.5,
+         tl.col = "black",
+         number.cex = 0.4,
+         addCoef.col = "black")
+
+```
+
+## 3. Method
+
+- Data Preprocessing
+```{r}
+
+# ============================
+# Data Preprocessing
+# ============================
+
+
+
+# data frame with all avaliable feature
+df_all <- Insurance[,setdiff(names(Insurance), "person_id")]
+
+# Convert all character columns to factors
+for (v in names(df_all)) {
+  if (is.character(df_all[[v]])) {
+    df_all[[v]] <- factor(df_all[[v]])
+  }
+}
+
+# convert 0/1 columns to factors
+discrete_cols <- c()
+
+non_char_cols <- names(df_all)[sapply(df_all, is.numeric)]
+num_cols <- setdiff(non_char_cols, discrete_cols)
+
+# ---- One-hot encoding (dummy variables) ----
+ # This turns each factor into 0/1 columns
+df_all <- model.matrix(~ ., data = df_all)
+
+# Final cleaned numeric dataset
+df_clean <- as.data.frame(df_all)
+# convert col names to valid names
+names(df_clean) <- make.names(names(df_clean))
+
+
+
+# Check cleaned dataset
+str(df_clean)
+head(df_clean)
+
+# ---- Data Transformation ----
+df_trans <- df_clean
+
+for(v in num_cols) {
+  if(skewness(df_trans[,v]) > 1) {
+    # log1p transform
+    df_trans[,v] <- log10(1+df_trans[,v])
+    
+    before <- ggplot(df_clean, aes(x = .data[[v]])) + 
+    geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "steelblue", alpha = 0.7) +
+    theme(axis.text.x = element_text(size = 4)) +
+    theme_minimal()
+    after <- ggplot(df_trans, aes(x = .data[[v]])) + 
+    geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "steelblue", alpha = 0.7) +
+    theme(axis.text.x = element_text(size = 4)) +
+    theme_minimal()
+    grid.arrange(grobs = list(before, after), ncol = 2)
+
+  }
+}
+
+str(df_trans)
+head(df_trans)
+```
+
+### 3.1 Regression Model
+
+#### 3.1.1 Linear regression model(Baseline)
+
+```{r split-data}
+
+set.seed(123)
+
+df_model <- df_trans
+# Number of observations
+n <- nrow(df_model)
+
+# 80% for training, 20% for test
+train_idx <- sample(seq_len(n), size = 0.8 * n)
+
+train <- df_model[train_idx, ]
+test  <- df_model[-train_idx, ]
+raw_train <- df_clean[train_idx, ]
+raw_test  <- df_clean[-train_idx, ]
+```
+
+We randomly split the cleaned dataset into a 80% training set and a 20% test set using a fixed random seed to ensure reproducibility. All models in this section are trained on the training set and evaluated on the test set for fair comparison.
+
+```{r baseline-ols}
+# Response variable
+#response_var <- "annual_medical_cost"
+response_var <- "charges"
+# Variables that would leak cost information — must be excluded
+sus_vars <- c("annual_premium",
+"monthly_premium", "claims_count", "avg_claim_amount", "total_claims_paid")
+leakage_vars <- c()
+
+
+# Construct predictor set
+predictor_vars <- setdiff(
+  names(df_model),
+  c(response_var, leakage_vars)
+)
+
+
+
+# Build model formula
+form_baseline <- as.formula(
+  paste(response_var, "~", paste(predictor_vars, collapse = "+"))
+)
+
+# Fit OLS
+lm_full <- lm(form_baseline, data = train)
+summary(lm_full)
+
+# Predictions
+train_pred_lm <- predict(lm_full, newdata = train)
+test_pred_lm  <- predict(lm_full, newdata = test)
+
+# Compute R^2
+y_train <- train[[response_var]]
+y_test  <- test[[response_var]]
+
+R2_train_lm <- 1 - sum((y_train - train_pred_lm)^2) /
+                    sum((y_train - mean(y_train))^2)
+
+R2_test_lm  <- 1 - sum((y_test - test_pred_lm)^2) /
+                    sum((y_test - mean(y_test))^2)
+
+# Compute RMSE
+RMSE_train_lm <- sqrt(mean((y_train - train_pred_lm)^2))
+RMSE_test_lm  <- sqrt(mean((y_test - test_pred_lm)^2))
+
+R2_train_lm; R2_test_lm
+RMSE_train_lm; RMSE_test_lm
+```
+
+We first fit a multiple linear regression model (OLS) using annual_medical_cost as the response variable. All demographic, lifestyle, health, and insurance-related variables were included as predictors, except for other cost-related fields such as annual_premium, monthly_premium, and total_claims_paid to avoid information leakage.
+
+The baseline OLS model achieves a training R^2 of 0.9904 and a test R^2 of 0.9898, with corresponding RMSE values of 0.0363 (train) and 0.0371 (test).
+
+These results indicate that the linear specification explains the vast majority of variance in annual medical cost and generalizes well to the test set, suggesting minimal overfitting.
+
+The baseline OLS model therefore provides a strong and interpretable reference point for evaluating the effects of Lasso regularization in the subsequent sections.
+
+
+#### 3.1.2 Linear regression model with Lasso and CV
+```{r lasso-cv-setup}
+
+# Construct design matrices (remove intercept)
+x_train_base <- model.matrix(form_baseline, data = train)[, -1]
+x_test_base  <- model.matrix(form_baseline, data = test)[, -1]
+```
+
+```{r lasso-cv-fit}
+set.seed(123)
+
+cv_lasso_base <- cv.glmnet(
+  x = x_train_base,
+  y = y_train,
+  alpha = 1,        # Lasso
+  nfolds = 10,
+  standardize = TRUE
+)
+
+lambda_min_base <- cv_lasso_base$lambda.min
+lambda_min_base
+```
+
+To address potential multicollinearity and reduce the dimensionality of the baseline linear regression model, we apply Lasso (L1) regularization to the same set of predictors. Lasso shrinks coefficient estimates toward zero and can effectively eliminate weak predictors, resulting in a more stable and interpretable model.
+
+We use 10-fold cross-validation to select the optimal regularization parameter $\lambda$ . The value that minimizes the cross-validated mean squared error is:
+
+$\lambda_{\text{min}}$ = 0.000359.
+
+This λ value represents the level of shrinkage that provides the best out-of-sample predictive performance for the Lasso model.
+
+```{r lasso-cv-performance}
+# Predictions for CV-selected lambda.min
+train_pred_cv_base <- predict(cv_lasso_base, newx = x_train_base, s = "lambda.min")
+test_pred_cv_base  <- predict(cv_lasso_base, newx = x_test_base,  s = "lambda.min")
+
+# Compute R^2
+R2_train_cv_base <- 1 - sum((y_train - train_pred_cv_base)^2) /
+                         sum((y_train - mean(y_train))^2)
+
+R2_test_cv_base  <- 1 - sum((y_test - test_pred_cv_base)^2) /
+                         sum((y_test - mean(y_test))^2)
+
+# Compute RMSE
+RMSE_train_cv_base <- sqrt(mean((y_train - train_pred_cv_base)^2))
+RMSE_test_cv_base  <- sqrt(mean((y_test - test_pred_cv_base)^2))
+
+R2_train_cv_base; R2_test_cv_base
+RMSE_train_cv_base; RMSE_test_cv_base
+```
+
+Using the optimal penalty parameter selected via 10-fold cross-validation, the Lasso model achieves strong predictive performance. The training and test results are summarized as follows:
+
+	•	Training R² = 0.9415
+	
+	•	Test R² = 0.9400
+	
+	•	Training RMSE = 0.0896
+	
+	•	Test RMSE = 0.0900
+
+These results show that the CV-selected Lasso model performs nearly identically to the baseline OLS model in terms of predictive accuracy. However, unlike OLS, Lasso shrinks several coefficients toward zero, effectively reducing model complexity and improving interpretability without sacrificing test-set performance. This makes the CV-based Lasso a more stable and parsimonious alternative to the unregularized linear model.
+
+#### 3.1.3 Linear regression model with Lasso and BIC
+```{r fit full Lasso path & compute BIC}
+# Fit full Lasso path on baseline features
+lasso_base <- glmnet(
+  x = x_train_base,
+  y = y_train,
+  alpha = 1,
+  standardize = TRUE
+)
+
+# Function to compute BIC for each lambda
+calc_bic <- function(fit, x, y) {
+  n <- length(y)
+  y_hat <- predict(fit, newx = x)
+  rss <- colSums((y - y_hat)^2)
+  df  <- fit$df  # number of non-zero coefficients
+  bic <- n * log(rss / n) + df * log(n)
+  bic
+}
+
+bic_base <- calc_bic(lasso_base, x_train_base, y_train)
+
+lambda_bic_base <- lasso_base$lambda[which.min(bic_base)]
+lambda_bic_base
+plot(log(lasso_base$lambda), bic_base, type = "l",
+     xlab = "log(lambda)", ylab = "BIC")
+abline(v = log(lambda_bic_base), lty = 2)
+```
+
+
+
+While cross-validation selects the penalty parameter that minimizes prediction error, it often results in a relatively flexible model with more nonzero coefficients. To obtain a more parsimonious model, we additionally apply the Bayesian Information Criterion (BIC) to select the optimal value of $\lambda$ along the Lasso regularization path.
+
+We compute the BIC for each candidate $\lambda$ by combining model fit and model complexity. As shown in the BIC curve, the minimum value occurs at:
+
+$\lambda_{\text{BIC}}$ = 0.0004747.
+
+This value is larger than the CV-selected $\lambda_{\min}$ , indicating stronger shrinkage and a more aggressive reduction of coefficients. The vertical dashed line in the BIC plot marks the location of the selected $\lambda$ , which corresponds to the most parsimonious model under the BIC criterion.
+
+
+```{r use BIC λ to evaluate performance}
+# Predictions using BIC-selected lambda
+train_pred_bic_base <- predict(lasso_base, newx = x_train_base, s = lambda_bic_base)
+test_pred_bic_base  <- predict(lasso_base, newx = x_test_base,  s = lambda_bic_base)
+
+# Compute R^2
+R2_train_bic_base <- 1 - sum((y_train - train_pred_bic_base)^2) /
+                          sum((y_train - mean(y_train))^2)
+
+R2_test_bic_base  <- 1 - sum((y_test - test_pred_bic_base)^2) /
+                          sum((y_test - mean(y_test))^2)
+
+# Compute RMSE
+RMSE_train_bic_base <- sqrt(mean((y_train - train_pred_bic_base)^2))
+RMSE_test_bic_base  <- sqrt(mean((y_test - test_pred_bic_base)^2))
+
+R2_train_bic_base; R2_test_bic_base
+RMSE_train_bic_base; RMSE_test_bic_base
+```
+
+Using the penalty parameter selected by BIC, the Lasso model achieves the following predictive performance:
+
+	•	Training R² = 0.94147
+	
+	•	Test R² = 0.94002
+	
+	•	Training RMSE = 0.08960
+	
+	•	Test RMSE = 0.08998
+
+The predictive accuracy of the BIC-selected model is nearly identical to that of the CV-selected Lasso model. But BIC applies a stronger penalty and favors simpler models, it leads to a sparser coefficient structure with more variables shrunk toward zero. This results in a more parsimonious model while maintaining essentially the same out-of-sample accuracy.
+
+
+```{r baseline-summary}
+
+
+results_baseline <- data.frame(
+  Model = c("OLS baseline",
+            "Lasso (CV λ_min)",
+            "Lasso (BIC)"),
+  R2_test = c(R2_test_lm, R2_test_cv_base, R2_test_bic_base),
+  RMSE_test = c(RMSE_test_lm, RMSE_test_cv_base, RMSE_test_bic_base)
+)
+
+results_baseline
+```
+
+Table reports the test performance of the three baseline linear models.
+The OLS model shows the highest accuracy (test R^2 = 0.9898, RMSE = 0.0371) and explains most of the variation in medical cost. OLS keeps all predictors and applies no coefficient shrinkage.
+
+The two Lasso models—CV and BIC—yield lower accuracy (test $R^2$ $\approx$ 0.94, RMSE ≈ 0.09), but produce more compact models. Lasso shrinks many coefficients toward zero and reduces model complexity. The CV-selected Lasso retains more predictors; the BIC-selected Lasso produces the sparsest structure with similar predictive performance.
+
+Overall, OLS provides the best predictive accuracy, while Lasso offers simpler and more interpretable models, serving as useful baselines for comparison with nonlinear approaches in later sections.
+
+```{r}
+
+# --- OLS (baseline) ---
+results <- data.frame(preds = test_pred_lm, actual = y_test)
+results$residuals <- results$actual - results$preds
+
+# Prediction vs Actual
+ggplot(results, aes(x = preds, y = actual)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(color = "red") +
+  labs(title = "OLS Prediction vs Actual")
+
+# Prediction vs Residuals
+ggplot(results, aes(x = preds, y = residuals)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, color = "red") +
+  labs(title = "OLS Prediction vs Residuals")
+```
+
+1.
+
+The OLS prediction–actual plot shows points concentrated tightly along the 45° line, indicating strong linear fit. The residual plot reveals a clear curved pattern, suggesting non-linearity not captured by the model. Residuals deviate systematically at both low and high predicted values, indicating model misspecification.
+
+
+
+```{r}
+# --- CV ---
+
+test_pred_cv_base <- as.numeric(test_pred_cv_base)
+
+results <- data.frame(preds = test_pred_cv_base, actual = y_test)
+results$residuals <- results$actual - results$preds
+
+# Prediction vs Actual
+ggplot(results, aes(x = preds, y = actual)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(color = "red") +
+  labs(title = "Best CV Prediction vs Actual")
+
+# Prediction vs Residuals
+ggplot(results, aes(x = preds, y = residuals)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, color = "red") +
+  labs(title = "Best CV Prediction vs Residuals")
+```
+
+2.
+
+The CV-selected Lasso model produces a prediction–actual relationship similar to OLS, though slightlymore compressed due to coeﬀicient shrinkage. The residual plot also shows a pronounced curvedpattern, indicating remaining non-linearity. Shrinkage improves model stability but does not resolvethe structural deviation visible in residuals.
+
+```{r}
+# --- BIC ---
+test_pred_bic_base <- as.numeric(test_pred_bic_base)
+
+results <- data.frame(preds = test_pred_bic_base, actual = y_test)
+results$residuals <- results$actual - results$preds
+
+# Prediction vs Actual
+ggplot(results, aes(x = preds, y = actual)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(color = "red") +
+  labs(title = "Best BIC Prediction vs Actual")
+
+# Prediction vs Residuals
+ggplot(results, aes(x = preds, y = residuals)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, color = "red") +
+  labs(title = "Best BIC Prediction vs Residuals")
+```
+
+3.
+
+The BIC-selected Lasso model shows nearly identical prediction–actual behavior as the CV model, with even stronger shrinkage leading to a slightly more compressed fit. The residual plot again displays the same curved structure, confirming that model simplification does not address the underlying non-linearity in the data.
+
+Summary
+
+Across OLS, CV-Lasso, and BIC-Lasso, prediction accuracy remains high, but all residual plots reveal systematic curvature. This indicates that the baseline linear structure is insufficient and motivates the use of nonlinear terms or more flexible models in later sections.
+
+### 3.2 Tree-based Model
+#### 3.2.1 Random Forest
+
+```{r}
+
+y_train <- train$charges
+y_test <- test$charges
+
+B <- 100
+p <- ncol(train) - 1
+
+rf <- randomForest(charges ~ ., data = train, 
+                       mtry = p/2, ntree = B, importance = TRUE)
+
+# 5-fold Cross-Validation
+cv_ctrl <- trainControl(method = "cv", number = 5)
+
+rf_cv <- train(
+  charges ~ ., 
+  data = train,
+  method = "rf",
+  trControl = cv_ctrl,
+  tuneLength = 8,
+  ntree = 200,
+)
+
+rf_cv
+```
+
+
+```{r}
+
+rf_pred_train_log <- predict(rf_cv, newdata = train %>% select(-charges))
+rf_pred_test_log <- predict(rf_cv, newdata = test %>% select(-charges))
+
+# ==========================================
+#  關鍵修改：還原回原始尺度 (Back-transform)
+#  公式：10^x - 1
+# ==========================================
+
+# A. 還原「真實值」
+y_train_orig <- raw_train$charges
+y_test_orig <- raw_test$charges
+
+# B. 還原「預測值」
+rf_pred_train_orig <- 10^(rf_pred_train_log) - 1
+rf_pred_test_orig <- 10^(rf_pred_test_log) - 1
+
+# ==========================================
+#  5. 計算指標 (使用原始尺度數據)
+# ==========================================
+
+# Train RMSE & R2
+rf_train_rmse <- sqrt(mean((rf_pred_train_orig - y_train_orig)^2))
+rf_train_R2 <- 1 - sum((rf_pred_train_orig - y_train_orig)^2) /
+                   sum((y_train_orig - mean(y_train_orig))^2)
+
+# Test RMSE & R2 (這是最重要的指標)
+rf_test_rmse <- sqrt(mean((rf_pred_test_orig - y_test_orig)^2))
+rf_test_R2 <- 1 - sum((rf_pred_test_orig - y_test_orig)^2) /
+                  sum((y_test_orig - mean(y_test_orig))^2)
+
+# 輸出結果
+cat("Training RMSE (Original):", rf_train_rmse, "\n")
+cat("Testing RMSE (Original):", rf_test_rmse, "\n")
+cat("Training R2 (Original):", rf_train_R2, "\n")
+cat("Testing R2 (Original):", rf_test_R2, "\n")
+
+# 查看變數重要性
+varImp(rf_cv)
+
+```
+
+
+
+```{r}
+
+# ==========================================
+#  6. 畫殘差圖 (Residual Plot) - 原始尺度
+# ==========================================
+
+# 計算殘差 (真實 - 預測)
+residuals_test <- y_test_orig - rf_pred_test_orig
+
+# 建立繪圖用的 DataFrame
+plot_data <- data.frame(
+  Predicted = rf_pred_test_orig,
+  Residuals = residuals_test
+)
+
+# 使用 ggplot2 繪圖
+ggplot(plot_data, aes(x = Predicted, y = Residuals)) +
+  geom_point(alpha = 0.5, color = "darkblue") + # 散佈點
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") + # 0 水平線
+  labs(
+    title = "Residual Plot (Random Forest)",
+    subtitle = "Scale: Original Prices (Back-transformed from log10)",
+    x = "Predicted Charges",
+    y = "Residuals (Actual - Predicted)"
+  ) +
+  theme_minimal()
+```
+#### 3.2.2 XGBoost
+
+
+```{r}
+dtrain <- xgb.DMatrix(data = as.matrix(raw_train %>% select(-charges)), label = raw_train$charges)
+params <- list(
+  booster = "gbtree",
+  objective = "reg:tweedie",  # <--- 重點！這是預測數值用的目標函數
+  eval_metric = "rmse",            # 評估指標用 RMSE (均方根誤差)
+  eta = 0.05,                       # 學習率
+  max_depth = 6,                   # 樹深
+  subsample = 0.8,
+  colsample_bytree = 1,
+  gamma = 0.05,
+  min_child_weight = 5
+)
+
+# --- 步驟 4: 訓練模型 ---
+# 這裡使用交叉驗證 (CV) 來找最佳迭代次數 (nrounds)，避免過擬合
+cv_model <- xgb.cv(
+  set.seed(42),
+  params = params,
+  data = dtrain,
+  nrounds = 1000,        # 先設大一點，讓它跑
+  nfold = 5,             # 3-fold cross validation
+  early_stopping_rounds = 10, # 如果 10 次沒進步就停
+  verbose = 1,           # 顯示過程
+  print_every_n = 100
+)
+
+# 取得最佳的迭代次數
+best_nrounds <- cv_model$best_iteration
+
+# 用最佳次數正式訓練最終模型
+final_model <- xgb.train(
+  set.seed(42),
+  params = params,
+  data = dtrain,
+  nrounds = best_nrounds
+)
+```
+
+```{r}
+dtest <- xgb.DMatrix(data = as.matrix(raw_test %>% select(-charges)), label = raw_test$charges)
+pred <- predict(final_model, dtest)
+
+# 4. 驗證準確度 (用原本的金額來算 RMSE)
+rmse <- sqrt(mean((raw_test$charges - pred)^2))
+
+cat("--- 模型評估 ---\n")
+cat("測試集 RMSE (美金):", rmse, "\n")
+
+# 算一下 R-squared 看看有沒有進步
+rss <- sum((raw_test$charges - pred) ^ 2)
+tss <- sum((raw_test$charges - mean(raw_test$charges)) ^ 2)
+r_sq <- 1 - rss/tss
+cat("R-squared (解釋力):", r_sq, "\n")
+```
+
+```{r}
+results <- data.frame(preds = pred, actual = raw_test$charges)
+results$residuals <- results$actual - results$preds
+
+# 1. 真實值 vs 預測值 (理想狀況要是 45度角直線)
+ggplot(results, aes(x = preds, y = actual)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(color = "red") +
+  labs(title = "Prediction vs Actual")
+
+# 2. 殘差分佈
+ggplot(results, aes(x = preds, y = residuals)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, color = "red")
+```
