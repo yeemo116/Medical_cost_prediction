@@ -169,6 +169,82 @@ for (page in 1:num_pages) {
 
 ```
 
+```{r}
+# 假設您的資料集名稱為 Insurance
+Insurance_view <- Insurance
+
+# ============================
+# 0. 資料預處理 (保留您的邏輯)
+# ============================
+# Convert all character columns to factors
+for (v in names(Insurance_view)) {
+  if (is.character(Insurance_view[[v]])) {
+    Insurance_view[[v]] <- factor(Insurance_view[[v]])
+  }
+}
+
+# ============================
+# 1. Q-Q Plots (針對連續變數)
+# ============================
+
+# 1.1 BMI Q-Q Plot
+p_qq_bmi <- ggplot(Insurance_view, aes(sample = bmi)) +
+  stat_qq(color = "steelblue", alpha = 0.5) +
+  stat_qq_line(color = "red", lwd = 1) +
+  labs(title = "Q-Q Plot: BMI", x = "Theoretical Quantiles", y = "Sample Quantiles") +
+  theme_minimal()
+
+# 1.2 Log(Charges) Q-Q Plot
+# 注意：這裡使用 log() 自然對數，若需 log10 可自行替換
+p_qq_charges <- ggplot(Insurance_view, aes(sample = log1p(charges))) +
+  stat_qq(color = "steelblue", alpha = 0.5) +
+  stat_qq_line(color = "red", lwd = 1) +
+  labs(title = "Q-Q Plot: Log(Charges)", x = "Theoretical Quantiles", y = "Sample Quantiles") +
+  theme_minimal()
+
+# 展示 Q-Q Plots
+grid.arrange(p_qq_bmi, p_qq_charges, ncol = 2)
+
+
+# ============================
+# 2. Pie Charts (針對類別變數)
+# ============================
+
+# 定義一個畫圓餅圖的函數，這樣不用重複寫程式碼
+draw_pie_chart <- function(data, col_name) {
+  # 1. 計算數量與百分比
+  plot_data <- data %>%
+    count(.data[[col_name]]) %>%
+    mutate(
+      perc = n / sum(n),
+      labels = scales::percent(perc) # 轉換成百分比格式 (e.g. 50%)
+    ) %>%
+    arrange(desc(perc)) # 排序讓圖表比較好看
+
+  # 2. 繪圖
+  ggplot(plot_data, aes(x = "", y = perc, fill = .data[[col_name]])) +
+    geom_bar(width = 1, stat = "identity", color = "white") +
+    coord_polar("y", start = 0) +
+    # 加入文字標籤 (放置在扇形中間)
+    geom_text(aes(label = labels), 
+              position = position_stack(vjust = 0.5), 
+              size = 4, color = "black") +
+    labs(title = paste("Pie Chart:", col_name), x = NULL, y = NULL, fill = col_name) +
+    theme_void() + # 圓餅圖通常不需要座標軸背景，使用 void 主題最乾淨
+    theme(plot.title = element_text(hjust = 0.5, face = "bold")) +
+    scale_fill_brewer(palette = "Pastel1") # 使用柔和的配色
+}
+
+# 繪製指定的圓餅圖
+pie_sex <- draw_pie_chart(Insurance_view, "sex")
+pie_smoker <- draw_pie_chart(Insurance_view, "smoker")
+pie_region <- draw_pie_chart(Insurance_view, "region")
+
+# 展示圓餅圖 (排版：上方兩個，下方一個)
+grid.arrange(pie_sex, pie_smoker, pie_region, 
+             layout_matrix = rbind(c(1, 2), c(3, 3)))
+```
+
 ### 2.3. Bivariate Analysis
 
 ```{r}
@@ -210,6 +286,157 @@ corrplot(corr_mat, method = "color",
          addCoef.col = "black")
 
 ```
+
+
+```{r}
+Insurance_view <- Insurance
+
+# ============================
+# 1. 類別變數 vs 費用 (Categorical vs Charges)
+# Use Boxplot + Jitter 看分佈與離群值
+# ============================
+
+# 定義一個繪圖函數，避免重複代碼
+plot_box <- function(data, x_col, y_col, fill_color) {
+  # 關鍵修正：使用 as.factor() 強制將 x 軸變數轉為類別因子
+  # 這樣 scale_fill_brewer 才能運作，且 Boxplot 會正確分組
+  ggplot(data, aes(x = as.factor(.data[[x_col]]), 
+                   y = .data[[y_col]], 
+                   fill = as.factor(.data[[x_col]]))) +
+    
+    geom_boxplot(alpha = 0.7, outlier.shape = NA) + 
+    stat_summary(fun = mean, geom = "point", shape = 23, size = 3, fill = "white") + 
+    
+    # 這裡的 x 標籤我們手動設回原本的欄位名稱，不然會顯示 "as.factor(children)"
+    labs(title = paste(x_col, "vs", y_col), 
+         x = x_col, 
+         y = y_col, 
+         fill = x_col) + # 設定圖例標題
+    
+    theme_minimal() +
+    theme(legend.position = "none") + # 通常 Boxplot 不需要圖例，因為 x 軸已經有標籤了
+    scale_fill_brewer(palette = fill_color)
+}
+
+# 重新執行繪圖
+p1 <- plot_box(Insurance_view, "smoker", "charges", "Set1")
+p2 <- plot_box(Insurance_view, "sex", "charges", "Pastel1")
+p3 <- plot_box(Insurance_view, "region", "charges", "Set2")
+# 這行現在應該可以正常運作了，因為 children 會被轉為 factor
+p4 <- plot_box(Insurance_view, "children", "charges", "Spectral") 
+
+grid.arrange(p1, p2, p3, p4, ncol = 2)
+```
+### 2.4 Analysis of Interaction Effects
+
+```{r}
+Insurance_view$log_charges <- log1p(Insurance_view$charges)
+# ============================
+# 1. BMI * Smoker 
+# ============================
+
+p_bmi_smoker <- ggplot(Insurance_view, aes(x = bmi, y = charges, color = smoker)) +
+  geom_point(alpha = 0.5, size = 1) +
+  geom_smooth(method = "lm", se = FALSE, size = 1.2) + # 加粗回歸線
+  scale_color_manual(values = c("yes" = "#c0392b", "no" = "#2980b9")) +
+  labs(title = "1. Interaction: BMI * Smoker",
+       x = "BMI", y = "Charges") +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+
+p_bmi_smoker
+```
+
+```{r}
+# ============================
+# 1. BMI * Smoker 
+# ============================
+log_p_bmi_smoker <- ggplot(Insurance_view, aes(x = bmi, y = log_charges, color = smoker)) +
+  geom_point(alpha = 0.5, size = 1) +
+  geom_smooth(method = "lm", se = FALSE, size = 1.2) + # 加粗回歸線
+  scale_color_manual(values = c("yes" = "#c0392b", "no" = "#2980b9")) +
+  labs(title = "1. Interaction: BMI * Smoker",
+       x = "BMI", y = "Log1p(Charges)") +
+  theme_minimal() +
+  theme(legend.position = "top")
+log_p_bmi_smoker
+```
+
+```{r}
+# ============================
+# 2. Age * Smoker 
+# ============================
+p_age_smoker <- ggplot(Insurance_view, aes(x = age, y = charges, color = smoker)) +
+  geom_point(alpha = 0.5, size = 1) +
+  geom_smooth(method = "lm", se = FALSE, size = 1.2) +
+  scale_color_manual(values = c("yes" = "#c0392b", "no" = "#2980b9")) +
+  labs(title = "2. Interaction: Age * Smoker",
+       x = "Age", y = "Charges") +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+p_age_smoker
+```
+
+```{r}
+# ============================
+# 2. Age * Smoker 
+# ============================
+log_p_age_smoker <- ggplot(Insurance_view, aes(x = age, y = log_charges, color = smoker)) +
+  geom_point(alpha = 0.5, size = 1) +
+  geom_smooth(method = "lm", se = FALSE, size = 1.2) +
+  scale_color_manual(values = c("yes" = "#c0392b", "no" = "#2980b9")) +
+  labs(title = "2. Interaction: Age * Smoker",
+       x = "Age", y = "Log1p(Charges)") +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+log_p_age_smoker
+```
+
+```{r}
+# ============================
+# 特殊處理：為了畫 bmi:age，我們需要把 age 分組
+# ============================
+# 將年齡切分為三個階段：青年(18-35), 中年(36-55), 老年(55+)
+Insurance_view <- Insurance_view %>%
+  mutate(age_group = cut(age, 
+                         breaks = c(0, 35, 55, 100), 
+                         labels = c("Young (18-35)", "Middle (36-55)", "Senior (55+)")))
+# ============================
+# 3. BMI * Age 
+# ============================
+# 這裡使用我們剛才創造的 age_group 來分組
+p_bmi_age <- ggplot(Insurance_view, aes(x = bmi, y = charges, color = age_group)) +
+  geom_point(alpha = 0.3, size = 1) +
+  geom_smooth(method = "lm", se = FALSE, size = 1.2) +
+  scale_color_brewer(palette = "Dark2") + # 使用高對比顏色
+  labs(title = "3. Interaction: BMI * Age (Grouped)",
+       x = "BMI", y = "Charges", color = "Age Group") +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+p_bmi_age
+```
+
+```{r}
+# ============================
+# 3. BMI * Age 
+# ============================
+# 這裡使用我們剛才創造的 age_group 來分組
+p_bmi_age <- ggplot(Insurance_view, aes(x = bmi, y = log_charges, color = age_group)) +
+  geom_point(alpha = 0.3, size = 1) +
+  geom_smooth(method = "lm", se = FALSE, size = 1.2) +
+  scale_color_brewer(palette = "Dark2") + # 使用高對比顏色
+  labs(title = "3. Interaction: BMI * Age (Grouped)",
+       x = "BMI", y = "Log1p(Charges)", color = "Age Group") +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+p_bmi_age
+```
+
 
 ## 3. Method
 
@@ -281,7 +508,8 @@ for(v in num_cols) {
 }
 
 ```
-We aim to categorical data perform dummy one-hot encoding. Then, for the right-skew numerical data, we transform data by log1p().
+We first apply one-hot encoding to all categorical variables. For right-skewed numerical variables, we apply a log1p transformation.
+
 
 - Data Splitting
 ```{r split-data}
@@ -1035,8 +1263,6 @@ cat("Testing R-squared:", r_sq, "\n")
 ```
 
 ```{r}
-# 
-
 results <- data.frame(preds = pred, actual = test_ori$charges)
 results$residuals <- results$actual - results$preds
 
@@ -1051,4 +1277,16 @@ ggplot(results, aes(x = preds, y = residuals)) +
   geom_point(alpha = 0.5) +
   geom_hline(yintercept = 0, color = "red") +
   labs(title = "Prediction vs Residual")
+```
+
+
+```{r}
+# 1. Compute importance matrix
+importance_matrix <- xgb.importance(feature_names = colnames(dtrain), model = final_model)
+
+# 2. Watch parameters
+print(importance_matrix)
+
+# 3. Draw plot
+xgb.plot.importance(importance_matrix)
 ```
