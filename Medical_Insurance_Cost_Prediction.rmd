@@ -90,11 +90,11 @@ summary(Insurance)      # Summary statistics
 
 # Count missing values in each column
 na_counts <- sum(is.na(Insurance))
-na_counts 
+na_counts # 0 NA data
 
 # Count how many rows have at least one missing value
 missing_rows <- sum(!complete.cases(Insurance))
-missing_rows
+missing_rows # 0 missing data
 
 ```
 
@@ -219,99 +219,133 @@ corrplot(corr_mat, method = "color",
 # ============================
 
 
-
 # data frame with all avaliable feature
-df_all <- Insurance[,setdiff(names(Insurance), "person_id")]
+df_raw <- Insurance
 
 # Convert all character columns to factors
-for (v in names(df_all)) {
-  if (is.character(df_all[[v]])) {
-    df_all[[v]] <- factor(df_all[[v]])
+for (v in names(df_raw)) {
+  if (is.character(df_raw[[v]])) {
+    df_raw[[v]] <- factor(df_raw[[v]])
   }
 }
 
 # convert 0/1 columns to factors
 discrete_cols <- c()
 
-non_char_cols <- names(df_all)[sapply(df_all, is.numeric)]
+non_char_cols <- names(df_raw)[sapply(df_raw, is.numeric)]
 num_cols <- setdiff(non_char_cols, discrete_cols)
 
 # ---- One-hot encoding (dummy variables) ----
  # This turns each factor into 0/1 columns
-df_all <- model.matrix(~ ., data = df_all)
+df_ori <- model.matrix(~ ., data = df_raw)
 
 # Final cleaned numeric dataset
-df_clean <- as.data.frame(df_all)
+df_ori <- as.data.frame(df_ori)
 # convert col names to valid names
-names(df_clean) <- make.names(names(df_clean))
+names(df_ori) <- make.names(names(df_ori))
 
 
 
-# Check cleaned dataset
-str(df_clean)
-head(df_clean)
+# View origininal dataset
+str(df_ori)
+head(df_ori)
 
 # ---- Data Transformation ----
-df_trans <- df_clean
+df_trans <- df_ori
 
 for(v in num_cols) {
   if(skewness(df_trans[,v]) > 1) {
     # log1p transform
-    df_trans[,v] <- log10(1+df_trans[,v])
+    df_trans[,v] <- log1p(df_trans[,v])
     
-    before <- ggplot(df_clean, aes(x = .data[[v]])) + 
+    before <- ggplot(df_ori, aes(x = .data[[v]])) + 
     geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "steelblue", alpha = 0.7) +
     theme(axis.text.x = element_text(size = 4)) +
-    theme_minimal()
+    theme_minimal() + 
+    labs(
+      title = paste("Before Transformation:", v)
+    )
     after <- ggplot(df_trans, aes(x = .data[[v]])) + 
     geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "steelblue", alpha = 0.7) +
     theme(axis.text.x = element_text(size = 4)) +
-    theme_minimal()
+    theme_minimal() +
+    labs(
+      title = paste("After Transformation:", v),
+      x = paste0("log1p(", v, ")")      # x label 直接寫清楚
+    )
     grid.arrange(grobs = list(before, after), ncol = 2)
 
   }
 }
 
-str(df_trans)
-head(df_trans)
+```
+We aim to categorical data perform dummy one-hot encoding. Then, for the right-skew numerical data, we transform data by log1p().
+
+- Data Splitting
+```{r split-data}
+
+set.seed(123)
+
+# Number of observations
+n <- nrow(df_trans)
+
+# 80% for training, 20% for test
+train_idx <- sample(seq_len(n), size = 0.8 * n)
+
+train <- df_trans[train_idx, ]
+test  <- df_trans[-train_idx, ]
+
+train_ori <- df_ori[train_idx, ]
+test_ori  <- df_ori[-train_idx, ]
+```
+
+We randomly split the cleaned dataset into a 80% training set and a 20% test set using a fixed random seed to ensure reproducibility. All models in this section are trained on the training set and evaluated on the test set for fair comparison.
+
+- Some Useful Function
+```{r}
+computeRMSE <- function(y_pred, y_true, transform = FALSE) {
+  if (transform == TRUE) {
+    y_pred <- expm1(y_pred)
+    y_true <- expm1(y_true)
+  }
+  rmse <- sqrt(mean((y_pred - y_true)^2))
+    
+  return(rmse)
+}
+
+computeR2 <- function(y_pred, y_true, transform = FALSE) {
+  if (transform == TRUE) {
+    y_pred <- expm1(y_pred)
+    y_true <- expm1(y_true)
+  }
+  
+  SSE <- sum((y_true - y_pred)^2)
+  SST <- sum((y_true - mean(y_true))^2)
+  
+  R2 <- 1 - SSE/SST
+  
+  return(R2)
+}
+
 ```
 
 ### 3.1 Regression Model
 
 #### 3.1.1 Linear regression model(Baseline)
 
-```{r split-data}
-
-set.seed(123)
-
-df_model <- df_trans
-# Number of observations
-n <- nrow(df_model)
-
-# 80% for training, 20% for test
-train_idx <- sample(seq_len(n), size = 0.8 * n)
-
-train <- df_model[train_idx, ]
-test  <- df_model[-train_idx, ]
-raw_train <- df_clean[train_idx, ]
-raw_test  <- df_clean[-train_idx, ]
-```
-
-We randomly split the cleaned dataset into a 80% training set and a 20% test set using a fixed random seed to ensure reproducibility. All models in this section are trained on the training set and evaluated on the test set for fair comparison.
 
 ```{r baseline-ols}
 # Response variable
 #response_var <- "annual_medical_cost"
 response_var <- "charges"
 # Variables that would leak cost information — must be excluded
-sus_vars <- c("annual_premium",
-"monthly_premium", "claims_count", "avg_claim_amount", "total_claims_paid")
+# sus_vars <- c("annual_premium", "monthly_premium", "claims_count", "avg_claim_amount", "total_claims_paid")
 leakage_vars <- c()
 
 
 # Construct predictor set
 predictor_vars <- setdiff(
-  names(df_model),
+  names(df_trans),
   c(response_var, leakage_vars)
 )
 
@@ -334,15 +368,15 @@ test_pred_lm  <- predict(lm_full, newdata = test)
 y_train <- train[[response_var]]
 y_test  <- test[[response_var]]
 
-R2_train_lm <- 1 - sum((y_train - train_pred_lm)^2) /
-                    sum((y_train - mean(y_train))^2)
+R2_train_lm <- computeR2(train_pred_lm, y_train, TRUE)
+#  1 - sum((y_train - train_pred_lm)^2) / sum((y_train - mean(y_train))^2)
 
-R2_test_lm  <- 1 - sum((y_test - test_pred_lm)^2) /
-                    sum((y_test - mean(y_test))^2)
+R2_test_lm  <- computeR2(test_pred_lm, y_test, TRUE)
+# 1 - sum((y_test - test_pred_lm)^2) / sum((y_test - mean(y_test))^2)
 
 # Compute RMSE
-RMSE_train_lm <- sqrt(mean((y_train - train_pred_lm)^2))
-RMSE_test_lm  <- sqrt(mean((y_test - test_pred_lm)^2))
+RMSE_train_lm <- computeRMSE(train_pred_lm, y_train, TRUE)
+RMSE_test_lm  <- computeRMSE(test_pred_lm, y_test, TRUE)
 
 R2_train_lm; R2_test_lm
 RMSE_train_lm; RMSE_test_lm
@@ -394,15 +428,15 @@ train_pred_cv_base <- predict(cv_lasso_base, newx = x_train_base, s = "lambda.mi
 test_pred_cv_base  <- predict(cv_lasso_base, newx = x_test_base,  s = "lambda.min")
 
 # Compute R^2
-R2_train_cv_base <- 1 - sum((y_train - train_pred_cv_base)^2) /
-                         sum((y_train - mean(y_train))^2)
+R2_train_cv_base <- computeR2(y_train, train_pred_cv_base, TRUE)
+#  1 - sum((y_train - train_pred_cv_base)^2) / sum((y_train - mean(y_train))^2)
 
-R2_test_cv_base  <- 1 - sum((y_test - test_pred_cv_base)^2) /
-                         sum((y_test - mean(y_test))^2)
+R2_test_cv_base  <- computeR2(y_test, test_pred_cv_base, TRUE)
+#  1 - sum((y_test - test_pred_cv_base)^2) / sum((y_test - mean(y_test))^2)
 
 # Compute RMSE
-RMSE_train_cv_base <- sqrt(mean((y_train - train_pred_cv_base)^2))
-RMSE_test_cv_base  <- sqrt(mean((y_test - test_pred_cv_base)^2))
+RMSE_train_cv_base <- computeRMSE(y_train, train_pred_cv_base, TRUE)
+RMSE_test_cv_base  <- computeRMSE(y_test, test_pred_cv_base, TRUE)
 
 R2_train_cv_base; R2_test_cv_base
 RMSE_train_cv_base; RMSE_test_cv_base
@@ -437,7 +471,8 @@ calc_bic <- function(fit, x, y) {
   rss <- colSums((y - y_hat)^2)
   df  <- fit$df  # number of non-zero coefficients
   bic <- n * log(rss / n) + df * log(n)
-  bic
+  
+  return(bic)
 }
 
 bic_base <- calc_bic(lasso_base, x_train_base, y_train)
@@ -466,15 +501,15 @@ train_pred_bic_base <- predict(lasso_base, newx = x_train_base, s = lambda_bic_b
 test_pred_bic_base  <- predict(lasso_base, newx = x_test_base,  s = lambda_bic_base)
 
 # Compute R^2
-R2_train_bic_base <- 1 - sum((y_train - train_pred_bic_base)^2) /
-                          sum((y_train - mean(y_train))^2)
+R2_train_bic_base <- computeR2(y_train, train_pred_bic_base, TRUE)
+# 1 - sum((y_train - train_pred_bic_base)^2) / sum((y_train - mean(y_train))^2)
 
-R2_test_bic_base  <- 1 - sum((y_test - test_pred_bic_base)^2) /
-                          sum((y_test - mean(y_test))^2)
+R2_test_bic_base  <- computeR2(y_test, test_pred_bic_base, TRUE)
+# 1 - sum((y_test - test_pred_bic_base)^2) / sum((y_test - mean(y_test))^2)
 
 # Compute RMSE
-RMSE_train_bic_base <- sqrt(mean((y_train - train_pred_bic_base)^2))
-RMSE_test_bic_base  <- sqrt(mean((y_test - test_pred_bic_base)^2))
+RMSE_train_bic_base <- computeRMSE(y_train, train_pred_bic_base, TRUE)
+RMSE_test_bic_base  <- computeRMSE(y_test, test_pred_bic_base, TRUE)
 
 R2_train_bic_base; R2_test_bic_base
 RMSE_train_bic_base; RMSE_test_bic_base
@@ -517,7 +552,7 @@ Overall, OLS provides the best predictive accuracy, while Lasso offers simpler a
 ```{r}
 
 # --- OLS (baseline) ---
-results <- data.frame(preds = test_pred_lm, actual = y_test)
+results <- data.frame(preds = expm1(test_pred_lm), actual = expm1(y_test))
 results$residuals <- results$actual - results$preds
 
 # Prediction vs Actual
@@ -544,7 +579,7 @@ The OLS prediction–actual plot shows points concentrated tightly along the 45�
 
 test_pred_cv_base <- as.numeric(test_pred_cv_base)
 
-results <- data.frame(preds = test_pred_cv_base, actual = y_test)
+results <- data.frame(preds = expm1(test_pred_cv_base), actual = expm1(y_test))
 results$residuals <- results$actual - results$preds
 
 # Prediction vs Actual
@@ -568,7 +603,7 @@ The CV-selected Lasso model produces a prediction–actual relationship similar 
 # --- BIC ---
 test_pred_bic_base <- as.numeric(test_pred_bic_base)
 
-results <- data.frame(preds = test_pred_bic_base, actual = y_test)
+results <- data.frame(preds = expm1(test_pred_bic_base), actual = expm1(y_test))
 results$residuals <- results$actual - results$preds
 
 # Prediction vs Actual
@@ -596,72 +631,82 @@ Across OLS, CV-Lasso, and BIC-Lasso, prediction accuracy remains high, but all r
 #### 3.2.1 Random Forest
 
 ```{r}
+set.seed(321)
 
-y_train <- train$charges
-y_test <- test$charges
+response_var <- c("charges")
 
-B <- 100
-p <- ncol(train) - 1
+# Construct predictor set
+predictor_vars <- setdiff(
+  names(df_ori),
+  c(response_var)
+)
 
-rf <- randomForest(charges ~ ., data = train, 
-                       mtry = p/2, ntree = B, importance = TRUE)
+# Formula
+form_rf <- as.formula(
+  paste(response_var, "~", paste(predictor_vars, collapse = "+"))
+)
+
+y_train <- train_ori[,response_var]
+y_test <- test_ori[,response_var]
+
+B <- 200
+p <- ncol(train_ori) - 1
+
+# rf <- randomForest(form_rf, data = train_raw, 
+#                       mtry = p/2, ntree = B, importance = TRUE)
 
 # 5-fold Cross-Validation
 cv_ctrl <- trainControl(method = "cv", number = 5)
 
+# Train random forest with B trees of 2~p features
 rf_cv <- train(
-  charges ~ ., 
-  data = train,
+  form_rf, 
+  data = train_ori,
   method = "rf",
   trControl = cv_ctrl,
-  tuneLength = 8,
-  ntree = 200,
+  tuneLength = p-1,
+  ntree = B,
 )
 
 rf_cv
-```
 
+# Variable Importance
+varImp(rf_cv)
+
+# prediction
+rf_pred_train <- predict(rf_cv, newdata = train_ori)
+rf_pred_test <- predict(rf_cv, newdata = test_ori)
+```
+The best number of features for the random forest is 5, which has the highest $R^2$ and the lowest RMSE.
 
 ```{r}
 
-rf_pred_train_log <- predict(rf_cv, newdata = train %>% select(-charges))
-rf_pred_test_log <- predict(rf_cv, newdata = test %>% select(-charges))
+
 
 # ==========================================
 #  關鍵修改：還原回原始尺度 (Back-transform)
 #  公式：10^x - 1
 # ==========================================
 
-# A. 還原「真實值」
-y_train_orig <- raw_train$charges
-y_test_orig <- raw_test$charges
-
-# B. 還原「預測值」
-rf_pred_train_orig <- 10^(rf_pred_train_log) - 1
-rf_pred_test_orig <- 10^(rf_pred_test_log) - 1
 
 # ==========================================
 #  5. 計算指標 (使用原始尺度數據)
 # ==========================================
 
 # Train RMSE & R2
-rf_train_rmse <- sqrt(mean((rf_pred_train_orig - y_train_orig)^2))
-rf_train_R2 <- 1 - sum((rf_pred_train_orig - y_train_orig)^2) /
-                   sum((y_train_orig - mean(y_train_orig))^2)
+rf_train_rmse <- computeRMSE(rf_pred_train, y_train)
+rf_train_R2 <- computeR2(rf_pred_train, y_train)
 
 # Test RMSE & R2 (這是最重要的指標)
-rf_test_rmse <- sqrt(mean((rf_pred_test_orig - y_test_orig)^2))
-rf_test_R2 <- 1 - sum((rf_pred_test_orig - y_test_orig)^2) /
-                  sum((y_test_orig - mean(y_test_orig))^2)
+rf_test_rmse <- computeRMSE(rf_pred_test, y_test)
+rf_test_R2 <- computeR2(rf_pred_test, y_test)
 
 # 輸出結果
-cat("Training RMSE (Original):", rf_train_rmse, "\n")
-cat("Testing RMSE (Original):", rf_test_rmse, "\n")
-cat("Training R2 (Original):", rf_train_R2, "\n")
-cat("Testing R2 (Original):", rf_test_R2, "\n")
+cat("Training RMSE:", rf_train_rmse, "\n")
+cat("Testing RMSE: ", rf_test_rmse, "\n")
+cat("Training R2:  ", rf_train_R2, "\n")
+cat("Testing R2:   ", rf_test_R2, "\n")
 
-# 查看變數重要性
-varImp(rf_cv)
 
 ```
 
@@ -694,11 +739,11 @@ ggplot(plot_data, aes(x = Predicted, y = Residuals)) +
   ) +
   theme_minimal()
 ```
+
 #### 3.2.2 XGBoost
 
-
 ```{r}
-dtrain <- xgb.DMatrix(data = as.matrix(raw_train %>% select(-charges)), label = raw_train$charges)
+dtrain <- xgb.DMatrix(data = as.matrix(train_raw %>% select(-charges)), label = train_raw$charges)
 params <- list(
   booster = "gbtree",
   objective = "reg:tweedie",  # <--- 重點！這是預測數值用的目標函數
@@ -737,24 +782,24 @@ final_model <- xgb.train(
 ```
 
 ```{r}
-dtest <- xgb.DMatrix(data = as.matrix(raw_test %>% select(-charges)), label = raw_test$charges)
+dtest <- xgb.DMatrix(data = as.matrix(test_raw %>% select(-charges)), label = test_raw$charges)
 pred <- predict(final_model, dtest)
 
 # 4. 驗證準確度 (用原本的金額來算 RMSE)
-rmse <- sqrt(mean((raw_test$charges - pred)^2))
+rmse <- sqrt(mean((test_raw$charges - pred)^2))
 
 cat("--- 模型評估 ---\n")
 cat("測試集 RMSE (美金):", rmse, "\n")
 
 # 算一下 R-squared 看看有沒有進步
-rss <- sum((raw_test$charges - pred) ^ 2)
-tss <- sum((raw_test$charges - mean(raw_test$charges)) ^ 2)
+rss <- sum((test_raw$charges - pred) ^ 2)
+tss <- sum((test_raw$charges - mean(test_raw$charges)) ^ 2)
 r_sq <- 1 - rss/tss
 cat("R-squared (解釋力):", r_sq, "\n")
 ```
 
 ```{r}
-results <- data.frame(preds = pred, actual = raw_test$charges)
+results <- data.frame(preds = pred, actual = test_raw$charges)
 results$residuals <- results$actual - results$preds
 
 # 1. 真實值 vs 預測值 (理想狀況要是 45度角直線)
