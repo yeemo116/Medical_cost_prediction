@@ -68,6 +68,8 @@ library(caret)
 library(xgboost)
 library(Matrix)
 library(caTools)
+library(leaps)
+
 ```
 
 ### 2.1. Load and Inspect the dataset
@@ -626,6 +628,217 @@ The BIC-selected Lasso model shows nearly identical prediction–actual behavior
 Summary
 
 Across OLS, CV-Lasso, and BIC-Lasso, prediction accuracy remains high, but all residual plots reveal systematic curvature. This indicates that the baseline linear structure is insufficient and motivates the use of nonlinear terms or more flexible models in later sections.
+
+#### 3.1.2 
+
+### subset selection
+
+```{r}
+train_set = train[,-1]
+test_set = test[,-1]
+```
+
+```{r}
+set.seed(123)
+regfit.full = regsubsets(charges ~ ., data = train_set)
+reg1.summary = summary(regfit.full)
+reg1.summary
+```
+
+```{r}
+#par(mfrow=c(1,2))
+index = which.max(reg1.summary$adjr2)
+cat("\nSize:", index, "\n")
+cat("Adjusted RSq:", reg1.summary$adjr2[index],"\n")
+coef(regfit.full,index)
+plot(reg1.summary$adjr2, xlab='Number of Variables',ylab='Adjusted RSq',type='b', pch=19)
+points(index,reg1.summary$adjr2[index],col = "blue", pch=19)
+
+
+index = which.min(reg1.summary$bic)
+cat("\nSize:", index, "\n")
+cat("BIC:", reg1.summary$bic[index],"\n")
+coef(regfit.full,index)
+plot(reg1.summary$bic, xlab='Number of Variables',ylab='BIC',type='b', pch=19)
+points(index,reg1.summary$bic[index],col = "blue", pch=19)
+
+```
+
+```{r}
+test.mat = model.matrix(charges~.,data = test_set)
+test.errors = rep(NA,8)
+for(i in 1:8){
+  coefi = coef(regfit.full,id=i)
+  intercept = as.vector(coefi)[1]
+  pred = test.mat[,names(coefi)] %*% coefi
+  test.errors[i] = sqrt(mean((test_set$charges - pred)^2))
+}
+min.index = which.min(reg1.summary$rss)
+cat("\nSize:", min.index, "\n")
+cat("Train RMSE:", sqrt(reg1.summary$rss[min.index]/n),"\n")
+coef(regfit.full,id=min.index)
+plot(sqrt((reg1.summary$rss)/n), xlab='Number of Variables',ylab='Train RMSE',type='b',pch=19)
+points(min.index, sqrt(reg1.summary$rss[min.index]/n),col = "blue", pch=19)
+
+min.index = which.min(test.errors)
+cat("\nSize:", min.index, "\n")
+cat("Test RMSE:", test.errors[min.index],"\n")
+coef(regfit.full,id=min.index)
+plot(1:8, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch=19)
+points(min.index, test.errors[min.index],col = "blue", pch=19)
+```
+
+#### forward selection
+
+```{r}
+set.seed(123)
+regfit.fwd = regsubsets(charges~.,data = train_set,method = 'forward')
+reg.fwd.summary = summary(regfit.fwd)
+reg.fwd.summary
+```
+
+```{r}
+index = which.max(reg.fwd.summary$adjr2)
+cat("\nSize:", index, "\n")
+cat("Adjusted RSq:", reg.fwd.summary$adjr2[index],"\n")
+coef(regfit.fwd,index)
+plot(reg.fwd.summary$adjr2, xlab='Number of Variables',ylab='Adjusted RSq',type='b', pch=19)
+points(index,reg.fwd.summary$adjr2[index],col = "blue", pch=19)
+
+
+index = which.min(reg.fwd.summary$bic)
+cat("\nSize:", index, "\n")
+cat("BIC:", reg.fwd.summary$bic[index],"\n")
+coef(regfit.fwd,index)
+plot(reg.fwd.summary$bic, xlab='Number of Variables',ylab='BIC',type='b', pch=19)
+points(index,reg.fwd.summary$bic[index],col = "blue", pch=19)
+```
+
+```{r}
+test.mat = model.matrix(charges~.,data = test_set)
+test.errors = rep(NA,8)
+for(i in 1:8){
+  coefi = coef(regfit.fwd,id=i)
+  intercept = as.vector(coefi)[1]
+  pred = test.mat[,names(coefi)] %*% coefi
+  test.errors[i] = sqrt(mean((test_set$charges - pred)^2))
+}
+min.index = which.min(reg.fwd.summary$rss)
+cat("\nSize:", min.index, "\n")
+cat("Train RMSE:", sqrt(reg.fwd.summary$rss[min.index]/n),"\n")
+coef(regfit.fwd,id=min.index)
+plot(sqrt((reg.fwd.summary$rss)/n), xlab='Number of Variables',ylab='Train RMSE',type='b',pch=19)
+points(min.index, sqrt(reg.fwd.summary$rss[min.index]/n),col = "blue", pch=19)
+
+min.index = which.min(test.errors)
+cat("\nSize:", min.index, "\n")
+cat("Test RMSE:", test.errors[min.index],"\n")
+coef(regfit.fwd,id=min.index)
+plot(1:8, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch=19)
+points(min.index, test.errors[min.index],col = "blue", pch=19)
+```
+
+#### backward selection
+
+```{r}
+set.seed(123)
+regfit.bwd = regsubsets(charges~.,data = train_set,method = 'backward')
+reg.bwd.summary = summary(regfit.bwd)
+reg.bwd.summary
+```
+
+```{r}
+index = which.max(reg.bwd.summary$adjr2)
+cat("\nSize:", index, "\n")
+cat("Adjusted RSq:", reg.bwd.summary$adjr2[index],"\n")
+coef(regfit.bwd,index)
+plot(reg.bwd.summary$adjr2, xlab='Number of Variables',ylab='Adjusted RSq',type='b', pch=19)
+points(index,reg.bwd.summary$adjr2[index],col = "blue", pch=19)
+
+
+index = which.min(reg.bwd.summary$bic)
+cat("\nSize:", index, "\n")
+cat("BIC:", reg.bwd.summary$bic[index],"\n")
+coef(regfit.bwd,index)
+plot(reg.bwd.summary$bic, xlab='Number of Variables',ylab='BIC',type='b', pch=19)
+points(index,reg.bwd.summary$bic[index],col = "blue", pch=19)
+```
+
+```{r}
+test.mat = model.matrix(charges~.,data = test_set)
+test.errors = rep(NA,8)
+for(i in 1:8){
+  coefi = coef(regfit.bwd,id=i)
+  intercept = as.vector(coefi)[1]
+  pred = test.mat[,names(coefi)] %*% coefi
+  test.errors[i] = sqrt(mean((test_set$charges - pred)^2))
+}
+min.index = which.min(reg.bwd.summary$rss)
+cat("\nSize:", min.index, "\n")
+cat("Train RMSE:", sqrt(reg.bwd.summary$rss[min.index]/n),"\n")
+coef(regfit.bwd,id=min.index)
+plot(sqrt((reg.bwd.summary$rss)/n), xlab='Number of Variables',ylab='Train RMSE',type='b',pch=19)
+points(min.index, sqrt(reg.bwd.summary$rss[min.index]/n),col = "blue", pch=19)
+
+min.index = which.min(test.errors)
+cat("\nSize:", min.index, "\n")
+cat("Test RMSE:", test.errors[min.index],"\n")
+coef(regfit.bwd,id=min.index)
+plot(1:8, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch=19)
+points(min.index, test.errors[min.index],col = "blue", pch=19)
+```
+#### result
+Linear regression model with 7 predictors by feature selection:
+```{r}
+predictors = setdiff(
+  names(train),
+  c('charges','regionnorthwest')
+)
+form_fs <- as.formula(
+  paste('charges', "~", paste(predictors, collapse = "+"))
+)
+lm_fs <- lm(form_fs,data = train)
+summary(lm_fs)
+
+# Predictions
+train_pred <- predict(lm_fs, newdata = train)
+test_pred  <- predict(lm_fs, newdata = test)
+
+# Compute R^2
+y_train <- train$charges
+y_test  <- test$charges
+
+R2_train <- 1 - sum((y_train - train_pred)^2) /
+                    sum((y_train - mean(y_train))^2)
+R2_test  <- 1 - sum((y_test - test_pred)^2) /
+                    sum((y_test - mean(y_test))^2)
+
+# Compute RMSE
+RMSE_train <- sqrt(mean((y_train - train_pred)^2))
+RMSE_test  <- sqrt(mean((y_test - test_pred)^2))
+
+cat('Train R^2:',R2_train,'\n')
+cat('Test R^2:',R2_test,'\n')
+cat('Train RMSE:',RMSE_train,'\n')
+cat('Test RMSE:',RMSE_test,'\n')
+```
+
+```{r}
+results <- data.frame(preds = test_pred, actual = test_set$charges )
+results$residuals <- results$actual - results$preds
+
+# Prediction vs Actual
+ggplot(results, aes(x = preds, y = actual)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(color = "red") +
+  labs(title = "Prediction vs Actual")
+
+# Prediction vs Residuals
+ggplot(results, aes(x = preds, y = residuals)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, color = "red") +
+  labs(title = "Prediction vs Residuals")
+```
 
 ### 3.2 Tree-based Model
 #### 3.2.1 Random Forest
