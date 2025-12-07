@@ -305,6 +305,7 @@ We randomly split the cleaned dataset into a 80% training set and a 20% test set
 
 - Some Useful Function
 ```{r}
+# RMSE
 computeRMSE <- function(y_pred, y_true, transform = FALSE) {
   if (transform == TRUE) {
     y_pred <- expm1(y_pred)
@@ -315,6 +316,7 @@ computeRMSE <- function(y_pred, y_true, transform = FALSE) {
   return(rmse)
 }
 
+# R^2
 computeR2 <- function(y_pred, y_true, transform = FALSE) {
   if (transform == TRUE) {
     y_pred <- expm1(y_pred)
@@ -844,17 +846,24 @@ ggplot(results, aes(x = preds, y = residuals)) +
 #### 3.2.1 Random Forest
 
 ```{r}
+
+# ==========================================
+#  Random Forest model with CV
+# ==========================================
+
 set.seed(321)
 
+# --- Variable Setup ---
+# response variable (target)
 response_var <- c("charges")
 
-# Construct predictor set
+# Predictor variable set
 predictor_vars <- setdiff(
   names(df_ori),
   c(response_var)
 )
 
-# Formula
+# Construct model formula
 form_rf <- as.formula(
   paste(response_var, "~", paste(predictor_vars, collapse = "+"))
 )
@@ -862,7 +871,11 @@ form_rf <- as.formula(
 y_train <- train_ori[,response_var]
 y_test <- test_ori[,response_var]
 
+# --- Training model ---
+
+# number of tree (ntree)
 B <- 200
+# number of predictors
 p <- ncol(train_ori) - 1
 
 # rf <- randomForest(form_rf, data = train_raw, 
@@ -871,50 +884,44 @@ p <- ncol(train_ori) - 1
 # 5-fold Cross-Validation
 cv_ctrl <- trainControl(method = "cv", number = 5)
 
-# Train random forest with B trees of 2~p features
+# --- training random forest with CV ---
 rf_cv <- train(
   form_rf, 
   data = train_ori,
   method = "rf",
   trControl = cv_ctrl,
-  tuneLength = p-1,
-  ntree = B,
+  tuneLength = p-1, # try mtry = 1 to (p-1)
+  ntree = B, # B trees
 )
 
+# The result of best random forest
 rf_cv
 
 # Variable Importance
 varImp(rf_cv)
 
-# prediction
-rf_pred_train <- predict(rf_cv, newdata = train_ori)
-rf_pred_test <- predict(rf_cv, newdata = test_ori)
 ```
 The best number of features for the random forest is 5, which has the highest $R^2$ and the lowest RMSE.
 
 ```{r}
 
-
-
 # ==========================================
-#  關鍵修改：還原回原始尺度 (Back-transform)
-#  公式：10^x - 1
+#  Computing metrics
 # ==========================================
 
-
-# ==========================================
-#  5. 計算指標 (使用原始尺度數據)
-# ==========================================
+# Predictions
+rf_pred_train <- predict(rf_cv, newdata = train_ori)
+rf_pred_test <- predict(rf_cv, newdata = test_ori)
 
 # Train RMSE & R2
 rf_train_rmse <- computeRMSE(rf_pred_train, y_train)
 rf_train_R2 <- computeR2(rf_pred_train, y_train)
 
-# Test RMSE & R2 (這是最重要的指標)
+# Test RMSE & R2 (the most important metric)
 rf_test_rmse <- computeRMSE(rf_pred_test, y_test)
 rf_test_R2 <- computeR2(rf_pred_test, y_test)
 
-# 輸出結果
+# Output the result
 cat("Training RMSE:", rf_train_rmse, "\n")
 cat("Testing RMSE: ", rf_test_rmse, "\n")
 cat("Training R2:  ", rf_train_R2, "\n")
@@ -928,25 +935,35 @@ cat("Testing R2:   ", rf_test_R2, "\n")
 ```{r}
 
 # ==========================================
-#  6. 畫殘差圖 (Residual Plot) - 原始尺度
+#  Prediction and Residual Plot
 # ==========================================
 
-# 計算殘差 (真實 - 預測)
-residuals_test <- y_test_orig - rf_pred_test_orig
 
-# 建立繪圖用的 DataFrame
+
+# Build plot DataFrame
 plot_data <- data.frame(
-  Predicted = rf_pred_test_orig,
-  Residuals = residuals_test
+  Predicted = rf_pred_test,
+  #  Residuals = actual - predicts
+  actual = y_test,
+  Residuals = y_test - rf_pred_test
 )
 
-# 使用 ggplot2 繪圖
+# --- plots ---
+# 1. actual vs predicts (Ideally, the points should follow 45-degree line.)
+ggplot(plot_data, aes(x = Predicted, y = actual)) +
+  geom_point(alpha = 0.5, color = "darkblue") + # scatter point
+  geom_abline(yintercept = 0, color = "red", linetype = "dashed") + # 45-degree
+  labs(title = "Prediction vs Actual", 
+    x = "Predicted Charges",
+    y = "True Charges") +
+  theme_minimal()
+
+# 2. Residual Distribution (The points should follow horizontal line.)
 ggplot(plot_data, aes(x = Predicted, y = Residuals)) +
-  geom_point(alpha = 0.5, color = "darkblue") + # 散佈點
-  geom_hline(yintercept = 0, color = "red", linetype = "dashed") + # 0 水平線
+  geom_point(alpha = 0.5, color = "darkblue") + # scatter point
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") + # horizontal
   labs(
     title = "Residual Plot (Random Forest)",
-    subtitle = "Scale: Original Prices (Back-transformed from log10)",
     x = "Predicted Charges",
     y = "Residuals (Actual - Predicted)"
   ) +
@@ -956,36 +973,43 @@ ggplot(plot_data, aes(x = Predicted, y = Residuals)) +
 #### 3.2.2 XGBoost
 
 ```{r}
-dtrain <- xgb.DMatrix(data = as.matrix(train_raw %>% select(-charges)), label = train_raw$charges)
+# ==========================================
+#  XGBoost with CV
+# ==========================================
+
+dtrain <- xgb.DMatrix(data = as.matrix(train_ori %>% select(-charges)), label = train_ori$charges)
 params <- list(
   booster = "gbtree",
-  objective = "reg:tweedie",  # <--- 重點！這是預測數值用的目標函數
-  eval_metric = "rmse",            # 評估指標用 RMSE (均方根誤差)
-  eta = 0.05,                       # 學習率
-  max_depth = 6,                   # 樹深
-  subsample = 0.8,
-  colsample_bytree = 1,
-  gamma = 0.05,
-  min_child_weight = 5
+  objective = "reg:tweedie", # Importance! This is the target function for regression
+  eval_metric = "rmse",       # evaluate model by RMSE
+  eta = 0.05,                 # Learning rate
+  max_depth = 6,              # max depth of each tree
+  subsample = 0.8,            # Row subsampling rate
+  colsample_bytree = 1,       # Feature subsampling rate
+  gamma = 0.05,                   
+  min_child_weight = 5        # Min sum of instance weight needed in a child node
 )
 
-# --- 步驟 4: 訓練模型 ---
-# 這裡使用交叉驗證 (CV) 來找最佳迭代次數 (nrounds)，避免過擬合
+# --- Training Model ---
+
+# Using CV to find best rounds (nrounds) and avoid overfitting
 cv_model <- xgb.cv(
   set.seed(42),
   params = params,
   data = dtrain,
-  nrounds = 1000,        # 先設大一點，讓它跑
-  nfold = 5,             # 3-fold cross validation
-  early_stopping_rounds = 10, # 如果 10 次沒進步就停
-  verbose = 1,           # 顯示過程
+  nrounds = 1000,        # Upper bound for number of boosting rounds
+  nfold = 5,             # 5-fold cross validation
+  early_stopping_rounds = 10, # Stop if no improvement for 10 rounds
+  verbose = 1,           # Display training progress
   print_every_n = 100
 )
 
-# 取得最佳的迭代次數
+# Extract the best number of boosting rounds
+
 best_nrounds <- cv_model$best_iteration
 
-# 用最佳次數正式訓練最終模型
+
+# Train the final XGBoost model with optimal parameters
 final_model <- xgb.train(
   set.seed(42),
   params = params,
@@ -995,34 +1019,36 @@ final_model <- xgb.train(
 ```
 
 ```{r}
-dtest <- xgb.DMatrix(data = as.matrix(test_raw %>% select(-charges)), label = test_raw$charges)
+dtest <- xgb.DMatrix(data = as.matrix(test_ori %>% select(-charges)), label = test_ori$charges)
 pred <- predict(final_model, dtest)
 
-# 4. 驗證準確度 (用原本的金額來算 RMSE)
-rmse <- sqrt(mean((test_raw$charges - pred)^2))
+# --- Accuracy Validation ---
+# Compute RMSE
+rmse <- computeRMSE(pred, y_test)
 
-cat("--- 模型評估 ---\n")
-cat("測試集 RMSE (美金):", rmse, "\n")
+cat("--- Model Evaluation ---\n")
+cat("Testing RMSE (USD):", rmse, "\n")
 
-# 算一下 R-squared 看看有沒有進步
-rss <- sum((test_raw$charges - pred) ^ 2)
-tss <- sum((test_raw$charges - mean(test_raw$charges)) ^ 2)
-r_sq <- 1 - rss/tss
-cat("R-squared (解釋力):", r_sq, "\n")
+# Compute R-squared
+r_sq <- computeR2(pred, y_test)
+cat("Testing R-squared:", r_sq, "\n")
 ```
 
 ```{r}
-results <- data.frame(preds = pred, actual = test_raw$charges)
+# 
+
+results <- data.frame(preds = pred, actual = test_ori$charges)
 results$residuals <- results$actual - results$preds
 
-# 1. 真實值 vs 預測值 (理想狀況要是 45度角直線)
+# 1. actual vs predicts (The points should follow 45-degree line.)
 ggplot(results, aes(x = preds, y = actual)) +
   geom_point(alpha = 0.5) +
   geom_abline(color = "red") +
   labs(title = "Prediction vs Actual")
 
-# 2. 殘差分佈
+# 2. Residual Distribution (The points should follow horizontal line.)
 ggplot(results, aes(x = preds, y = residuals)) +
   geom_point(alpha = 0.5) +
-  geom_hline(yintercept = 0, color = "red")
+  geom_hline(yintercept = 0, color = "red") +
+  labs(title = "Prediction vs Residual")
 ```
