@@ -2,11 +2,13 @@
 title: "Medical Insurance Cost Prediction"
 author: 'SL group 6'
 date: "2025-12-03"
-header-includes:
-  - \usepackage{ctex}
 output:
-  pdf_document: 
+  pdf_document:
     latex_engine: xelatex
+mainfont: "Microsoft YaHei"
+header-includes:
+  - \usepackage{xeCJK}
+  - \setCJKmainfont{Microsoft YaHei}
 editor_options: 
   markdown: 
     wrap: 72
@@ -1407,24 +1409,31 @@ final_model <- xgb.train(
 
 ```{r}
 dtest <- xgb.DMatrix(data = as.matrix(test_ori %>% select(-charges)), label = test_ori$charges)
-pred <- predict(final_model, dtest)
+pred_xgb <- predict(final_model, dtest)
 
 # --- Accuracy Validation ---
 # Compute RMSE
-rmse <- computeRMSE(pred, y_test)
+rmse <- computeRMSE(pred_xgb, y_test)
 
 cat("--- Model Evaluation ---\n")
 cat("Testing RMSE (USD):", rmse, "\n")
 
 # Compute R-squared
-r_sq <- computeR2(pred, y_test)
+r_sq <- computeR2(pred_xgb, y_test)
 cat("Testing R-squared:", r_sq, "\n")
 ```
   With our optimal parameter setting, the XGB model achieves a testing $R^2$ of 0.963, indicating the outstanding predictive ability, and a testing RMSE of 2378.16, suggesting that on the unseen data the average prediction error in medical costs is approximately 2,400 USD.
 
 ```{r}
+plot_xgb <- data.frame(
+  preds = pred_xgb,
+  #  Residuals = actual - predicts
+  actual = y_test,
+  residuals = y_test - pred_xgb
+)
+
 # 1. Prediction vs Actual (修正 geom_abline)
-PvA_xgb <- ggplot(results, aes(x = preds, y = actual)) +
+PvA_xgb <- ggplot(plot_xgb, aes(x = preds, y = actual)) +
   geom_point(alpha = 0.5, color = "darkblue") +  # 加上顏色區分
   geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed", size = 1) + # 強制設定斜率為1
   labs(title = "XGBoost: Prediction vs Actual",
@@ -1433,7 +1442,7 @@ PvA_xgb <- ggplot(results, aes(x = preds, y = actual)) +
   theme_minimal()
 
 # 2. Residual Plot (修正 geom_hline)
-PvR_xgb <- ggplot(results, aes(x = preds, y = residuals)) +
+PvR_xgb <- ggplot(plot_xgb, aes(x = preds, y = residuals)) +
   geom_point(alpha = 0.5, color = "darkblue") +
   geom_hline(yintercept = 0, color = "red", linetype = "dashed", size = 1) + # 明確指定水平線
   labs(title = "XGBoost: Residual Analysis",
@@ -1454,14 +1463,14 @@ print(importance_matrix)
 # 3. Draw plot
 xgb.plot.importance(importance_matrix)
 ```
-According to the feature importance matrix, we can find *smoker*, *bmi*, *age* which are also the most three important feature in XGB model.
+  According to the feature importance matrix, we can find *smoker*, *bmi*, *age* which are also the most three important feature in XGB model.
 
 ```{r}
 rho <- 1.1 
 
 xgb_df <- data.frame(
   actuals = test_ori$charges,
-  preds = pred
+  preds = pred_xgb
 )
 
 xgb_df$raw_resid <- xgb_df$actuals - xgb_df$preds
@@ -1732,7 +1741,6 @@ learning models to predict medical insurance costs.
 
     -   Linear models achieved high $R^2$ but failed to capture the
         complex structure of residuals.
-
     -   XGBoost utilizing the Tweedie objective function
         ($\rho \approx 1.1$) proved to be the superior model. It
         successfully handled the zero-inflated (compound Poisson-Gamma)
