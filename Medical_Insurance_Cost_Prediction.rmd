@@ -458,6 +458,7 @@ for (v in names(df_raw)) {
   }
 }
 
+
 # convert 0/1 columns to factors
 discrete_cols <- c()
 
@@ -466,7 +467,7 @@ num_cols <- setdiff(non_char_cols, discrete_cols)
 
 # ---- One-hot encoding (dummy variables) ----
  # This turns each factor into 0/1 columns
-df_ori <- model.matrix(~ ., data = df_raw)
+df_ori <- model.matrix(~ ., data = df_raw)[,-1]
 
 # Final cleaned numeric dataset
 df_ori <- as.data.frame(df_ori)
@@ -487,25 +488,28 @@ for(v in num_cols) {
     # log1p transform
     df_trans[,v] <- log1p(df_trans[,v])
     
-    before <- ggplot(df_ori, aes(x = .data[[v]])) + 
+    before_trans <- ggplot(df_ori, aes(x = .data[[v]])) + 
     geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "steelblue", alpha = 0.7) +
     theme(axis.text.x = element_text(size = 4)) +
     theme_minimal() + 
     labs(
       title = paste("Before Transformation:", v)
     )
-    after <- ggplot(df_trans, aes(x = .data[[v]])) + 
-    geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "steelblue", alpha = 0.7) +
+    after_trans <- ggplot(df_trans, aes(x = .data[[v]])) + 
+    geom_histogram(aes(y = after_stat(density)), bins = 30, 
+                   fill = "steelblue", alpha = 0.7) +
     theme(axis.text.x = element_text(size = 4)) +
     theme_minimal() +
     labs(
       title = paste("After Transformation:", v),
       x = paste0("log1p(", v, ")")      # x label 直接寫清楚
     )
-    grid.arrange(grobs = list(before, after), ncol = 2)
+    grid.arrange(grobs = list(before_trans, after_trans), ncol = 2)
 
   }
 }
+
+
 
 ```
 We first apply one-hot encoding to all categorical variables. For right-skewed numerical variables, we apply a log1p transformation.
@@ -561,9 +565,9 @@ computeR2 <- function(y_pred, y_true, transform = FALSE) {
 
 ```
 
-### 3.1 Regression Model
+### 3.1 Linear Regression Model (Parametric)
 
-#### 3.1.1 Linear regression model(Baseline)
+#### 3.1.1 Multiple Linear Regression Model(Baseline)
 
 
 ```{r baseline-ols}
@@ -623,12 +627,14 @@ These results indicate that the linear specification explains the vast majority 
 The baseline OLS model therefore provides a strong and interpretable reference point for evaluating the effects of Lasso regularization in the subsequent sections.
 
 
-#### 3.1.2 Linear regression model with Lasso and CV
+#### 3.1.2 Lasso Linear Regression Model with CV
 ```{r lasso-cv-setup}
 
 # Construct design matrices (remove intercept)
 x_train_base <- model.matrix(form_baseline, data = train)[, -1]
 x_test_base  <- model.matrix(form_baseline, data = test)[, -1]
+head(x_train_base)
+head(x_test_base)
 ```
 
 ```{r lasso-cv-fit}
@@ -643,7 +649,11 @@ cv_lasso_base <- cv.glmnet(
 )
 
 lambda_min_base <- cv_lasso_base$lambda.min
-lambda_min_base
+
+cat("Best lambda: ", lambda_min_base, '\n')
+
+coef(cv_lasso_base, s = lambda_min_base)
+
 ```
 
 To address potential multicollinearity and reduce the dimensionality of the baseline linear regression model, we apply Lasso (L1) regularization to the same set of predictors. Lasso shrinks coefficient estimates toward zero and can effectively eliminate weak predictors, resulting in a more stable and interpretable model.
@@ -652,7 +662,7 @@ We use 10-fold cross-validation to select the optimal regularization parameter $
 
 $\lambda_{\text{min}}$ = 0.000359.
 
-This λ value represents the level of shrinkage that provides the best out-of-sample predictive performance for the Lasso model.
+This $\lambda$ value represents the level of shrinkage that provides the best out-of-sample predictive performance for the Lasso model.
 
 ```{r lasso-cv-performance}
 # Predictions for CV-selected lambda.min
@@ -674,11 +684,11 @@ R2_train_cv_base; R2_test_cv_base
 RMSE_train_cv_base; RMSE_test_cv_base
 ```
 
-Using the optimal penalty parameter selected via 10-fold cross-validation, the Lasso model achieves strong predictive performance. The training and test results are summarized as follows:
+Using the optimal penalty parameter selected via 10-fold cross-validation, the Lasso model achieves strong predictive performance. The training and testing results are summarized as follows:
 
-	•	Training R² = 0.9415
+	•	Training $R^2$ = 0.9415
 	
-	•	Test R² = 0.9400
+	•	Test $R^2$ = 0.9400
 	
 	•	Training RMSE = 0.0896
 	
@@ -686,7 +696,7 @@ Using the optimal penalty parameter selected via 10-fold cross-validation, the L
 
 These results show that the CV-selected Lasso model performs nearly identically to the baseline OLS model in terms of predictive accuracy. However, unlike OLS, Lasso shrinks several coefficients toward zero, effectively reducing model complexity and improving interpretability without sacrificing test-set performance. This makes the CV-based Lasso a more stable and parsimonious alternative to the unregularized linear model.
 
-#### 3.1.3 Linear regression model with Lasso and BIC
+#### 3.1.3 Lasso Regression Model with BIC
 ```{r fit full Lasso path & compute BIC}
 # Fit full Lasso path on baseline features
 lasso_base <- glmnet(
@@ -695,6 +705,7 @@ lasso_base <- glmnet(
   alpha = 1,
   standardize = TRUE
 )
+
 
 # Function to compute BIC for each lambda
 calc_bic <- function(fit, x, y) {
@@ -710,7 +721,12 @@ calc_bic <- function(fit, x, y) {
 bic_base <- calc_bic(lasso_base, x_train_base, y_train)
 
 lambda_bic_base <- lasso_base$lambda[which.min(bic_base)]
-lambda_bic_base
+
+cat("Best lambda: ", lambda_bic_base, '\n')
+
+coef(lasso_base, s = lambda_bic_base)
+
+
 plot(log(lasso_base$lambda), bic_base, type = "l",
      xlab = "log(lambda)", ylab = "BIC")
 abline(v = log(lambda_bic_base), lty = 2)
@@ -749,9 +765,9 @@ RMSE_train_bic_base; RMSE_test_bic_base
 
 Using the penalty parameter selected by BIC, the Lasso model achieves the following predictive performance:
 
-	•	Training R² = 0.94147
+	•	Training $R^2$ = 0.94147
 	
-	•	Test R² = 0.94002
+	•	Test $R^2$ = 0.94002
 	
 	•	Training RMSE = 0.08960
 	
@@ -784,20 +800,29 @@ Overall, OLS provides the best predictive accuracy, while Lasso offers simpler a
 ```{r}
 
 # --- OLS (baseline) ---
-results <- data.frame(preds = expm1(test_pred_lm), actual = expm1(y_test))
-results$residuals <- results$actual - results$preds
+results_ols <- data.frame(preds = expm1(test_pred_lm), actual = expm1(y_test))
+results_ols$residuals <- results_ols$actual - results_ols$preds
 
 # Prediction vs Actual
-ggplot(results, aes(x = preds, y = actual)) +
+PvA_ols <- ggplot(results_ols, aes(x = preds, y = actual)) +
   geom_point(alpha = 0.5) +
   geom_abline(color = "red") +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+
   labs(title = "OLS Prediction vs Actual")
 
 # Prediction vs Residuals
-ggplot(results, aes(x = preds, y = residuals)) +
+PvR_ols <- ggplot(results_ols, aes(x = preds, y = residuals)) +
   geom_point(alpha = 0.5) +
   geom_hline(yintercept = 0, color = "red") +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
   labs(title = "OLS Prediction vs Residuals")
+
+grid.arrange(grobs = list(PvA_ols, PvR_ols), ncol = 2)
 ```
 
 1.
@@ -811,44 +836,61 @@ The OLS prediction–actual plot shows points concentrated tightly along the 45�
 
 test_pred_cv_base <- as.numeric(test_pred_cv_base)
 
-results <- data.frame(preds = expm1(test_pred_cv_base), actual = expm1(y_test))
-results$residuals <- results$actual - results$preds
+results_cv <- data.frame(preds = expm1(test_pred_cv_base), actual = expm1(y_test))
+results_cv$residuals <- results_cv$actual - results_cv$preds
 
 # Prediction vs Actual
-ggplot(results, aes(x = preds, y = actual)) +
+PvA_cv <- ggplot(results_cv, aes(x = preds, y = actual)) +
   geom_point(alpha = 0.5) +
   geom_abline(color = "red") +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+
   labs(title = "Best CV Prediction vs Actual")
 
 # Prediction vs Residuals
-ggplot(results, aes(x = preds, y = residuals)) +
+PvR_cv <- ggplot(results_cv, aes(x = preds, y = residuals)) +
   geom_point(alpha = 0.5) +
   geom_hline(yintercept = 0, color = "red") +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
   labs(title = "Best CV Prediction vs Residuals")
+
+grid.arrange(grobs = list(PvA_cv, PvR_cv), ncol = 2)
 ```
 
 2.
 
-The CV-selected Lasso model produces a prediction–actual relationship similar to OLS, though slightlymore compressed due to coeﬀicient shrinkage. The residual plot also shows a pronounced curvedpattern, indicating remaining non-linearity. Shrinkage improves model stability but does not resolvethe structural deviation visible in residuals.
+The CV-selected Lasso model produces a prediction–actual relationship similar to OLS, though slightlymore compressed due to coefficient shrinkage. The residual plot also shows a pronounced curvedpattern, indicating remaining non-linearity. Shrinkage improves model stability but does not resolve the structural deviation visible in residuals.
 
 ```{r}
 # --- BIC ---
 test_pred_bic_base <- as.numeric(test_pred_bic_base)
 
-results <- data.frame(preds = expm1(test_pred_bic_base), actual = expm1(y_test))
-results$residuals <- results$actual - results$preds
+results_bic <- data.frame(preds = expm1(test_pred_bic_base), actual = expm1(y_test))
+results_bic$residuals <- results_bic$actual - results_bic$preds
 
 # Prediction vs Actual
-ggplot(results, aes(x = preds, y = actual)) +
+PvA_bic <- ggplot(results_bic, aes(x = preds, y = actual)) +
   geom_point(alpha = 0.5) +
   geom_abline(color = "red") +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
   labs(title = "Best BIC Prediction vs Actual")
 
 # Prediction vs Residuals
-ggplot(results, aes(x = preds, y = residuals)) +
+PvR_bic <- ggplot(results_bic, aes(x = preds, y = residuals)) +
   geom_point(alpha = 0.5) +
   geom_hline(yintercept = 0, color = "red") +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
   labs(title = "Best BIC Prediction vs Residuals")
+grid.arrange(grobs = list(PvA_bic, PvR_bic), ncol = 2)
+
 ```
 
 3.
@@ -859,13 +901,17 @@ Summary
 
 Across OLS, CV-Lasso, and BIC-Lasso, prediction accuracy remains high, but all residual plots reveal systematic curvature. This indicates that the baseline linear structure is insufficient and motivates the use of nonlinear terms or more flexible models in later sections.
 
-#### 3.1.2 
+#### 3.1.4 
 
 ### subset selection
 
 ```{r}
-train_set = train[,-1]
-test_set = test[,-1]
+train_set = train[,]
+test_set = test[,]
+
+str(train)
+str(train_set)
+
 ```
 
 ```{r}
@@ -876,7 +922,7 @@ reg1.summary
 ```
 
 ```{r}
-#par(mfrow=c(1,2))
+par(mfrow=c(1,2))
 index = which.max(reg1.summary$adjr2)
 cat("\nSize:", index, "\n")
 cat("Adjusted RSq:", reg1.summary$adjr2[index],"\n")
@@ -895,6 +941,8 @@ points(index,reg1.summary$bic[index],col = "blue", pch=19)
 ```
 
 ```{r}
+par(mfrow=c(1,2))
+
 test.mat = model.matrix(charges~.,data = test_set)
 test.errors = rep(NA,8)
 for(i in 1:8){
@@ -928,6 +976,8 @@ reg.fwd.summary
 ```
 
 ```{r}
+par(mfrow=c(1,2))
+
 index = which.max(reg.fwd.summary$adjr2)
 cat("\nSize:", index, "\n")
 cat("Adjusted RSq:", reg.fwd.summary$adjr2[index],"\n")
@@ -945,6 +995,8 @@ points(index,reg.fwd.summary$bic[index],col = "blue", pch=19)
 ```
 
 ```{r}
+par(mfrow=c(1,2))
+
 test.mat = model.matrix(charges~.,data = test_set)
 test.errors = rep(NA,8)
 for(i in 1:8){
@@ -978,6 +1030,8 @@ reg.bwd.summary
 ```
 
 ```{r}
+par(mfrow=c(1,2))
+
 index = which.max(reg.bwd.summary$adjr2)
 cat("\nSize:", index, "\n")
 cat("Adjusted RSq:", reg.bwd.summary$adjr2[index],"\n")
@@ -995,6 +1049,7 @@ points(index,reg.bwd.summary$bic[index],col = "blue", pch=19)
 ```
 
 ```{r}
+par(mfrow = c(1, 2))
 test.mat = model.matrix(charges~.,data = test_set)
 test.errors = rep(NA,8)
 for(i in 1:8){
@@ -1018,7 +1073,7 @@ plot(1:8, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch
 points(min.index, test.errors[min.index],col = "blue", pch=19)
 ```
 #### result
-Linear regression model with 7 predictors by feature selection:
+- Linear regression model with 7 predictors by feature selection:
 ```{r}
 predictors = setdiff(
   names(train),
@@ -1031,21 +1086,21 @@ lm_fs <- lm(form_fs,data = train)
 summary(lm_fs)
 
 # Predictions
-train_pred <- predict(lm_fs, newdata = train)
-test_pred  <- predict(lm_fs, newdata = test)
+train_pred_fs <- predict(lm_fs, newdata = train)
+test_pred_fs  <- predict(lm_fs, newdata = test)
 
 # Compute R^2
 y_train <- train$charges
 y_test  <- test$charges
 
-R2_train <- 1 - sum((y_train - train_pred)^2) /
-                    sum((y_train - mean(y_train))^2)
-R2_test  <- 1 - sum((y_test - test_pred)^2) /
-                    sum((y_test - mean(y_test))^2)
+R2_train <- computeR2(train_pred_fs, y_train, TRUE)
+#  1 - sum((y_train - train_pred)^2) / sum((y_train - mean(y_train))^2)
+R2_test  <- computeR2(test_pred_fs, y_test, TRUE) 
+#  1 - sum((y_test - test_pred_fs)^2) / sum((y_test - mean(y_test))^2)
 
 # Compute RMSE
-RMSE_train <- sqrt(mean((y_train - train_pred)^2))
-RMSE_test  <- sqrt(mean((y_test - test_pred)^2))
+RMSE_train <- computeRMSE(train_pred_fs, y_train, TRUE)
+RMSE_test  <- computeRMSE(test_pred_fs, y_test, TRUE)
 
 cat('Train R^2:',R2_train,'\n')
 cat('Test R^2:',R2_test,'\n')
@@ -1054,33 +1109,37 @@ cat('Test RMSE:',RMSE_test,'\n')
 ```
 
 ```{r}
-results <- data.frame(preds = test_pred, actual = test_set$charges )
+results <- data.frame(preds = expm1(test_pred_fs), actual = expm1(test_set$charges) )
 results$residuals <- results$actual - results$preds
 
 # Prediction vs Actual
-ggplot(results, aes(x = preds, y = actual)) +
+PvA_fs <- ggplot(results, aes(x = preds, y = actual)) +
   geom_point(alpha = 0.5) +
   geom_abline(color = "red") +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
   labs(title = "Prediction vs Actual")
 
 # Prediction vs Residuals
-ggplot(results, aes(x = preds, y = residuals)) +
+PvR_fs <- ggplot(results, aes(x = preds, y = residuals)) +
   geom_point(alpha = 0.5) +
   geom_hline(yintercept = 0, color = "red") +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
   labs(title = "Prediction vs Residuals")
+
+grid.arrange(grobs = list(PvA_fs, PvR_fs), ncol = 2)
+
 ```
 
-### 3.2 Tree-based Model
-#### 3.2.1 Random Forest
+### 3.2 Tree-based Model (Non-parametric)
+  Tree-based models are more flexible non-parametric methods that don't assume a specific functional form between predictors and response. They can effectively capture the non-linear and complex relationships in the datasets.
+  In this section, we want apply non-parametric models to compare with the parametric models in the previous section. In particular, we train random forest and XGBoost models, representing  aggregation and boosting methods, respectively. We also compare their performance of these two models.
 
+- Data Setup
 ```{r}
-
-# ==========================================
-#  Random Forest model with CV
-# ==========================================
-
-set.seed(321)
-
 # --- Variable Setup ---
 # response variable (target)
 response_var <- c("charges")
@@ -1091,13 +1150,27 @@ predictor_vars <- setdiff(
   c(response_var)
 )
 
+y_train <- train_ori[,response_var]
+y_test <- test_ori[,response_var]
+
+```
+
+#### 3.2.1 Random Forest
+
+```{r}
+
+# ==========================================
+#  Random Forest model with CV
+# ==========================================
+
+set.seed(321)
+
+# --- Parameter Setup ---
+
 # Construct model formula
 form_rf <- as.formula(
   paste(response_var, "~", paste(predictor_vars, collapse = "+"))
 )
-
-y_train <- train_ori[,response_var]
-y_test <- test_ori[,response_var]
 
 # --- Training model ---
 
@@ -1178,24 +1251,30 @@ plot_data <- data.frame(
 
 # --- plots ---
 # 1. actual vs predicts (Ideally, the points should follow 45-degree line.)
-ggplot(plot_data, aes(x = Predicted, y = actual)) +
+PvA_rf <- ggplot(plot_data, aes(x = Predicted, y = actual)) +
   geom_point(alpha = 0.5, color = "darkblue") + # scatter point
-  geom_abline(yintercept = 0, color = "red", linetype = "dashed") + # 45-degree
+  geom_abline(color = "red", linetype = "dashed") + # 45-degree
   labs(title = "Prediction vs Actual", 
     x = "Predicted Charges",
     y = "True Charges") +
+  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
   theme_minimal()
 
 # 2. Residual Distribution (The points should follow horizontal line.)
-ggplot(plot_data, aes(x = Predicted, y = Residuals)) +
+PvR_rf <- ggplot(plot_data, aes(x = Predicted, y = Residuals)) +
   geom_point(alpha = 0.5, color = "darkblue") + # scatter point
   geom_hline(yintercept = 0, color = "red", linetype = "dashed") + # horizontal
+  theme_minimal() +
+  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
   labs(
     title = "Residual Plot (Random Forest)",
     x = "Predicted Charges",
     y = "Residuals (Actual - Predicted)"
-  ) +
-  theme_minimal()
+  )
+
+grid.arrange(grobs = list(PvA_rf, PvR_rf), ncol = 2)
 ```
 
 #### 3.2.2 XGBoost
@@ -1267,16 +1346,25 @@ results <- data.frame(preds = pred, actual = test_ori$charges)
 results$residuals <- results$actual - results$preds
 
 # 1. actual vs predicts (The points should follow 45-degree line.)
-ggplot(results, aes(x = preds, y = actual)) +
+PvA_xgb <- ggplot(results, aes(x = preds, y = actual)) +
   geom_point(alpha = 0.5) +
   geom_abline(color = "red") +
+  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  theme_minimal() +
   labs(title = "Prediction vs Actual")
 
 # 2. Residual Distribution (The points should follow horizontal line.)
-ggplot(results, aes(x = preds, y = residuals)) +
+PvR_xgb <- ggplot(results, aes(x = preds, y = residuals)) +
   geom_point(alpha = 0.5) +
   geom_hline(yintercept = 0, color = "red") +
+  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
+  theme_minimal() +
   labs(title = "Prediction vs Residual")
+
+grid.arrange(grobs = list(PvA_xgb, PvR_xgb), ncol = 2)
+
 ```
 
 
