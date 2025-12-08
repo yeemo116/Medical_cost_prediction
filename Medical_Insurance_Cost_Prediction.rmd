@@ -2,13 +2,14 @@
 title: "Medical Insurance Cost Prediction"
 author: 'SL group 6'
 date: "2025-12-03"
-output:
-  pdf_document:
-    latex_engine: xelatex
-mainfont: "Microsoft YaHei"
 header-includes:
-  - \usepackage{xeCJK}
-  - \setCJKmainfont{Microsoft YaHei}
+  - \usepackage{ctex}
+output:
+  pdf_document: 
+    latex_engine: xelatex
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r setup, include=FALSE}
@@ -16,34 +17,44 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## 1. Introduction
+
 ### 1.1 Problem Definition
+
 ### 1.2 About Dataset
-This dataset provides information about 100,000 individuals including their demographics, socioeconomic status, health conditions, lifestyle factors, Insurance plans, and medical expenditures.
+
+This dataset provides information about 100,000 individuals including
+their demographics, socioeconomic status, health conditions, lifestyle
+factors, Insurance plans, and medical expenditures.
 
 In detail, the columns are:
 
-1. Demographics & Socioeconomic:
-person_id, age, sex, region, urban_rural, income, education, marital_status, employment_status, household_size, dependents
+1.  Demographics & Socioeconomic: person_id, age, sex, region,
+    urban_rural, income, education, marital_status, employment_status,
+    household_size, dependents
 
-2. Lifestyle & Habits:
-bmi, smoker, alcohol_freq, exercise_frequency, sleep_hours, stress_level
+2.  Lifestyle & Habits: bmi, smoker, alcohol_freq, exercise_frequency,
+    sleep_hours, stress_level
 
-3. Health & Clinical:
-hypertension, diabetes, copd, cardiovascular, cancer_history, kidney_disease, liver_disease, arthritis, mental_health, chronic_count, systolic_bp, diastolic_bp, ldl, hba1c, risk_score, is_high_risk
+3.  Health & Clinical: hypertension, diabetes, copd, cardiovascular,
+    cancer_history, kidney_disease, liver_disease, arthritis,
+    mental_health, chronic_count, systolic_bp, diastolic_bp, ldl, hba1c,
+    risk_score, is_high_risk
 
-4. Healthcare Utilization & Procedures:
-visits_last_year, hospitalizations_last_3yrs, days_hospitalized_last_3yrs, medication_count, proc_imaging, proc_surgery, proc_psycho, proc_consult_count, proc_lab, had_major
+4.  Healthcare Utilization & Procedures: visits_last_year,
+    hospitalizations_last_3yrs, days_hospitalized_last_3yrs,
+    medication_count, proc_imaging, proc_surgery, proc_psycho,
+    proc_consult_count, proc_lab, had_major
 
-5. Insurance & Policy:
-plan_type, network_tier, deductible, copay, policy_term_years, policy_changes_last_2yrs, provider_quality
+5.  Insurance & Policy: plan_type, network_tier, deductible, copay,
+    policy_term_years, policy_changes_last_2yrs, provider_quality
 
-6. Medical Costs & Claims:
-annual_medical_cost, annual_premium, monthly_premium, claims_count, avg_claim_amount, total_claims_paid
-
+6.  Medical Costs & Claims: annual_medical_cost, annual_premium,
+    monthly_premium, claims_count, avg_claim_amount, total_claims_paid
 
 ## 2. Exploratory Data Analysis (EDA)
 
-- Libraries
+-   Libraries
+
 ```{r,warning=FALSE,message=FALSE}
 # ============================
 # Load libraries
@@ -69,10 +80,11 @@ library(xgboost)
 library(Matrix)
 library(caTools)
 library(leaps)
-
+library(scales)
 ```
 
 ### 2.1. Load and Inspect the dataset
+
 ```{r}
 # ============================
 # Load and inspect the dataset
@@ -101,6 +113,7 @@ missing_rows # 0 missing data
 ```
 
 ### 2.2. Univariate Analysis
+
 ```{r}
 # ============================
 # Univariate Analysis
@@ -170,11 +183,11 @@ for (page in 1:num_pages) {
 ```
 
 ```{r}
-# 假設您的資料集名稱為 Insurance
+# Assuming your dataset is named 'Insurance'
 Insurance_view <- Insurance
 
 # ============================
-# 0. 資料預處理 (保留您的邏輯)
+# 0. Data Preprocessing (Preserving your logic)
 # ============================
 # Convert all character columns to factors
 for (v in names(Insurance_view)) {
@@ -184,7 +197,7 @@ for (v in names(Insurance_view)) {
 }
 
 # ============================
-# 1. Q-Q Plots (針對連續變數)
+# 1. Q-Q Plots (For continuous variables)
 # ============================
 
 # 1.1 BMI Q-Q Plot
@@ -195,53 +208,53 @@ p_qq_bmi <- ggplot(Insurance_view, aes(sample = bmi)) +
   theme_minimal()
 
 # 1.2 Log(Charges) Q-Q Plot
-# 注意：這裡使用 log() 自然對數，若需 log10 可自行替換
+# Note: Using natural log log() here; replace with log10 if needed
 p_qq_charges <- ggplot(Insurance_view, aes(sample = log1p(charges))) +
   stat_qq(color = "steelblue", alpha = 0.5) +
   stat_qq_line(color = "red", lwd = 1) +
-  labs(title = "Q-Q Plot: Log(Charges)", x = "Theoretical Quantiles", y = "Sample Quantiles") +
+  labs(title = "Q-Q Plot: Log1p(Charges)", x = "Theoretical Quantiles", y = "Sample Quantiles") +
   theme_minimal()
 
-# 展示 Q-Q Plots
+# Display Q-Q Plots
 grid.arrange(p_qq_bmi, p_qq_charges, ncol = 2)
 
 
 # ============================
-# 2. Pie Charts (針對類別變數)
+# 2. Pie Charts (For categorical variables)
 # ============================
 
-# 定義一個畫圓餅圖的函數，這樣不用重複寫程式碼
+# Define a function to draw pie charts to avoid repeating code
 draw_pie_chart <- function(data, col_name) {
-  # 1. 計算數量與百分比
+  # 1. Calculate counts and percentages
   plot_data <- data %>%
     count(.data[[col_name]]) %>%
     mutate(
       perc = n / sum(n),
-      labels = scales::percent(perc) # 轉換成百分比格式 (e.g. 50%)
+      labels = scales::percent(perc) # Convert to percentage format (e.g., 50%)
     ) %>%
-    arrange(desc(perc)) # 排序讓圖表比較好看
+    arrange(desc(perc)) # Sort to make the chart look better
 
-  # 2. 繪圖
+  # 2. Plotting
   ggplot(plot_data, aes(x = "", y = perc, fill = .data[[col_name]])) +
     geom_bar(width = 1, stat = "identity", color = "white") +
     coord_polar("y", start = 0) +
-    # 加入文字標籤 (放置在扇形中間)
-    geom_text(aes(label = labels), 
-              position = position_stack(vjust = 0.5), 
+    # Add text labels (positioned in the middle of the slices)
+    geom_text(aes(label = labels),
+              position = position_stack(vjust = 0.5),
               size = 4, color = "black") +
     labs(title = paste("Pie Chart:", col_name), x = NULL, y = NULL, fill = col_name) +
-    theme_void() + # 圓餅圖通常不需要座標軸背景，使用 void 主題最乾淨
+    theme_void() + # Pie charts usually don't need axis backgrounds; void theme is cleanest
     theme(plot.title = element_text(hjust = 0.5, face = "bold")) +
-    scale_fill_brewer(palette = "Pastel1") # 使用柔和的配色
+    scale_fill_brewer(palette = "Pastel1") # Use a pastel color palette
 }
 
-# 繪製指定的圓餅圖
+# Draw specific pie charts
 pie_sex <- draw_pie_chart(Insurance_view, "sex")
 pie_smoker <- draw_pie_chart(Insurance_view, "smoker")
 pie_region <- draw_pie_chart(Insurance_view, "region")
 
-# 展示圓餅圖 (排版：上方兩個，下方一個)
-grid.arrange(pie_sex, pie_smoker, pie_region, 
+# Display pie charts (Layout: two on top, one on bottom)
+grid.arrange(pie_sex, pie_smoker, pie_region,
              layout_matrix = rbind(c(1, 2), c(3, 3)))
 ```
 
@@ -287,19 +300,16 @@ corrplot(corr_mat, method = "color",
 
 ```
 
-
 ```{r}
-Insurance_view <- Insurance
-
 # ============================
-# 1. 類別變數 vs 費用 (Categorical vs Charges)
-# Use Boxplot + Jitter 看分佈與離群值
+# 1. Categorical Variables vs Charges
+# Use Boxplot to visualize distribution and outliers
 # ============================
 
-# 定義一個繪圖函數，避免重複代碼
+# Define a plotting function to avoid code duplication
 plot_box <- function(data, x_col, y_col, fill_color) {
-  # 關鍵修正：使用 as.factor() 強制將 x 軸變數轉為類別因子
-  # 這樣 scale_fill_brewer 才能運作，且 Boxplot 會正確分組
+  # Use as.factor() to force the x-axis variable into a categorical factor
+  # This allows scale_fill_brewer to work and ensures the Boxplot groups correctly
   ggplot(data, aes(x = as.factor(.data[[x_col]]), 
                    y = .data[[y_col]], 
                    fill = as.factor(.data[[x_col]]))) +
@@ -307,26 +317,27 @@ plot_box <- function(data, x_col, y_col, fill_color) {
     geom_boxplot(alpha = 0.7, outlier.shape = NA) + 
     stat_summary(fun = mean, geom = "point", shape = 23, size = 3, fill = "white") + 
     
-    # 這裡的 x 標籤我們手動設回原本的欄位名稱，不然會顯示 "as.factor(children)"
+    # Manually set the x-label back to the original column name; otherwise, it would display "as.factor(children)"
     labs(title = paste(x_col, "vs", y_col), 
          x = x_col, 
          y = y_col, 
-         fill = x_col) + # 設定圖例標題
+         fill = x_col) + # Set legend title
     
     theme_minimal() +
-    theme(legend.position = "none") + # 通常 Boxplot 不需要圖例，因為 x 軸已經有標籤了
+    theme(legend.position = "none") + # Boxplots usually don't need a legend since the x-axis is already labeled
     scale_fill_brewer(palette = fill_color)
 }
 
-# 重新執行繪圖
+# Re-run plotting
 p1 <- plot_box(Insurance_view, "smoker", "charges", "Set1")
 p2 <- plot_box(Insurance_view, "sex", "charges", "Pastel1")
 p3 <- plot_box(Insurance_view, "region", "charges", "Set2")
-# 這行現在應該可以正常運作了，因為 children 會被轉為 factor
+# This line should work correctly now because 'children' is converted to a factor
 p4 <- plot_box(Insurance_view, "children", "charges", "Spectral") 
 
 grid.arrange(p1, p2, p3, p4, ncol = 2)
 ```
+
 ### 2.4 Analysis of Interaction Effects
 
 ```{r}
@@ -337,7 +348,7 @@ Insurance_view$log_charges <- log1p(Insurance_view$charges)
 
 p_bmi_smoker <- ggplot(Insurance_view, aes(x = bmi, y = charges, color = smoker)) +
   geom_point(alpha = 0.5, size = 1) +
-  geom_smooth(method = "lm", se = FALSE, size = 1.2) + # 加粗回歸線
+  geom_smooth(method = "lm", se = FALSE, size = 1.2) +
   scale_color_manual(values = c("yes" = "#c0392b", "no" = "#2980b9")) +
   labs(title = "1. Interaction: BMI * Smoker",
        x = "BMI", y = "Charges") +
@@ -354,7 +365,7 @@ p_bmi_smoker
 # ============================
 log_p_bmi_smoker <- ggplot(Insurance_view, aes(x = bmi, y = log_charges, color = smoker)) +
   geom_point(alpha = 0.5, size = 1) +
-  geom_smooth(method = "lm", se = FALSE, size = 1.2) + # 加粗回歸線
+  geom_smooth(method = "lm", se = FALSE, size = 1.2) +
   scale_color_manual(values = c("yes" = "#c0392b", "no" = "#2980b9")) +
   labs(title = "1. Interaction: BMI * Smoker",
        x = "BMI", y = "Log1p(Charges)") +
@@ -397,9 +408,9 @@ log_p_age_smoker
 
 ```{r}
 # ============================
-# 特殊處理：為了畫 bmi:age，我們需要把 age 分組
+# Special Handling: To plot bmi:age, we need to group age
 # ============================
-# 將年齡切分為三個階段：青年(18-35), 中年(36-55), 老年(55+)
+# Divide age into three stages: Young (18-35), Middle (36-55), Senior (55+)
 Insurance_view <- Insurance_view %>%
   mutate(age_group = cut(age, 
                          breaks = c(0, 35, 55, 100), 
@@ -407,11 +418,11 @@ Insurance_view <- Insurance_view %>%
 # ============================
 # 3. BMI * Age 
 # ============================
-# 這裡使用我們剛才創造的 age_group 來分組
+# Here we use the age_group we just created for grouping
 p_bmi_age <- ggplot(Insurance_view, aes(x = bmi, y = charges, color = age_group)) +
   geom_point(alpha = 0.3, size = 1) +
   geom_smooth(method = "lm", se = FALSE, size = 1.2) +
-  scale_color_brewer(palette = "Dark2") + # 使用高對比顏色
+  scale_color_brewer(palette = "Dark2") + # Use high-contrast colors
   labs(title = "3. Interaction: BMI * Age (Grouped)",
        x = "BMI", y = "Charges", color = "Age Group") +
   theme_minimal() +
@@ -424,7 +435,7 @@ p_bmi_age
 # ============================
 # 3. BMI * Age 
 # ============================
-# 這裡使用我們剛才創造的 age_group 來分組
+# Here we use the age_group we just created for grouping
 p_bmi_age <- ggplot(Insurance_view, aes(x = bmi, y = log_charges, color = age_group)) +
   geom_point(alpha = 0.3, size = 1) +
   geom_smooth(method = "lm", se = FALSE, size = 1.2) +
@@ -437,10 +448,10 @@ p_bmi_age <- ggplot(Insurance_view, aes(x = bmi, y = log_charges, color = age_gr
 p_bmi_age
 ```
 
-
 ## 3. Method
 
-- Data Preprocessing
+-   Data Preprocessing
+
 ```{r}
 
 # ============================
@@ -512,10 +523,12 @@ for(v in num_cols) {
 
 
 ```
-We first apply one-hot encoding to all categorical variables. For right-skewed numerical variables, we apply a log1p transformation.
 
+We aim to categorical data perform dummy one-hot encoding. Then, for the
+right-skew numerical data, we transform data by log1p().
 
-- Data Splitting
+-   Data Splitting
+
 ```{r split-data}
 
 set.seed(123)
@@ -533,9 +546,13 @@ train_ori <- df_ori[train_idx, ]
 test_ori  <- df_ori[-train_idx, ]
 ```
 
-We randomly split the cleaned dataset into a 80% training set and a 20% test set using a fixed random seed to ensure reproducibility. All models in this section are trained on the training set and evaluated on the test set for fair comparison.
+We randomly split the cleaned dataset into a 80% training set and a 20%
+test set using a fixed random seed to ensure reproducibility. All models
+in this section are trained on the training set and evaluated on the
+test set for fair comparison.
 
-- Some Useful Function
+-   Some Useful Function
+
 ```{r}
 # RMSE
 computeRMSE <- function(y_pred, y_true, transform = FALSE) {
@@ -618,14 +635,20 @@ R2_train_lm; R2_test_lm
 RMSE_train_lm; RMSE_test_lm
 ```
 
-We first fit a multiple linear regression model (OLS) using annual_medical_cost as the response variable. All demographic, lifestyle, health, and insurance-related variables were included as predictors, except for other cost-related fields such as annual_premium, monthly_premium, and total_claims_paid to avoid information leakage.
+The baseline OLS model utilizes all transformed predictors to estimate
+medical charges. The model achieves a training R\^2 = 0.53 and test R\^2
+= 0.51, indicating that the linear structure explains only about half of
+the variance in medical costs. The RMSE values=8284.48 on the training
+set and 8644.52 on the test set show that substantial prediction error
+remains.
 
-The baseline OLS model achieves a training R^2 of 0.9904 and a test R^2 of 0.9898, with corresponding RMSE values of 0.0363 (train) and 0.0371 (test).
-
-These results indicate that the linear specification explains the vast majority of variance in annual medical cost and generalizes well to the test set, suggesting minimal overfitting.
-
-The baseline OLS model therefore provides a strong and interpretable reference point for evaluating the effects of Lasso regularization in the subsequent sections.
-
+Significant predictors include age, BMI, number of children, smoking
+status, and certain regional indicators, all aligning with expected
+relationships in healthcare expenditure. However, the large and uneven
+residuals suggest the presence of nonlinear patterns and
+heteroscedasticity that the linear model fails to capture. These
+findings imply that more flexible modeling approaches may be required to
+achieve improved predictive performance.
 
 #### 3.1.2 Lasso Linear Regression Model with CV
 ```{r lasso-cv-setup}
@@ -656,13 +679,17 @@ coef(cv_lasso_base, s = lambda_min_base)
 
 ```
 
-To address potential multicollinearity and reduce the dimensionality of the baseline linear regression model, we apply Lasso (L1) regularization to the same set of predictors. Lasso shrinks coefficient estimates toward zero and can effectively eliminate weak predictors, resulting in a more stable and interpretable model.
+In the Lasso model with 10-fold cross-validation, the selected penalty
+parameter is very small:
 
-We use 10-fold cross-validation to select the optimal regularization parameter $\lambda$ . The value that minimizes the cross-validated mean squared error is:
+$\lambda_{\min} \approx$ 0.0013
 
-$\lambda_{\text{min}}$ = 0.000359.
-
-This $\lambda$ value represents the level of shrinkage that provides the best out-of-sample predictive performance for the Lasso model.
+Such a small λ implies very weak regularization, so the Lasso solution
+is expected to be very close to the OLS solution. In other words,
+cross-validation suggests that the data do not benefit much from strong
+shrinkage on the coefficients under this feature scaling. As a result,
+the fitted coefficients and overall performance of the Lasso model are
+almost the same as those of the baseline linear regression.
 
 ```{r lasso-cv-performance}
 # Predictions for CV-selected lambda.min
@@ -684,17 +711,15 @@ R2_train_cv_base; R2_test_cv_base
 RMSE_train_cv_base; RMSE_test_cv_base
 ```
 
-Using the optimal penalty parameter selected via 10-fold cross-validation, the Lasso model achieves strong predictive performance. The training and testing results are summarized as follows:
+The model achieves $R^2_{\text{train}}$ = 0.636 and $R^2_{\text{test}}$
+= 0.568, which are similar to the baseline OLS model. The RMSE values
+(training: 8244.83, test: 8591.93) show no meaningful reduction in
+prediction error.
 
-	•	Training $R^2$ = 0.9415
-	
-	•	Test $R^2$ = 0.9400
-	
-	•	Training RMSE = 0.0896
-	
-	•	Test RMSE = 0.0900
-
-These results show that the CV-selected Lasso model performs nearly identically to the baseline OLS model in terms of predictive accuracy. However, unlike OLS, Lasso shrinks several coefficients toward zero, effectively reducing model complexity and improving interpretability without sacrificing test-set performance. This makes the CV-based Lasso a more stable and parsimonious alternative to the unregularized linear model.
+Because the dataset contains a modest number of predictors and exhibits
+notable nonlinear patterns, Lasso does not address the underlying model
+misspecification. Residual diagnostics continue to display curved
+structures, indicating that the linear assumption is insufficient.
 
 #### 3.1.3 Lasso Regression Model with BIC
 ```{r fit full Lasso path & compute BIC}
@@ -732,16 +757,16 @@ plot(log(lasso_base$lambda), bic_base, type = "l",
 abline(v = log(lambda_bic_base), lty = 2)
 ```
 
+To select the optimal regularization strength, we evaluated the full
+Lasso solution path using the Bayesian Information Criterion (BIC). The
+λ that minimizes BIC is:
 
+$\lambda_{\text{BIC}}$ = 0.001315
 
-While cross-validation selects the penalty parameter that minimizes prediction error, it often results in a relatively flexible model with more nonzero coefficients. To obtain a more parsimonious model, we additionally apply the Bayesian Information Criterion (BIC) to select the optimal value of $\lambda$ along the Lasso regularization path.
-
-We compute the BIC for each candidate $\lambda$ by combining model fit and model complexity. As shown in the BIC curve, the minimum value occurs at:
-
-$\lambda_{\text{BIC}}$ = 0.0004747.
-
-This value is larger than the CV-selected $\lambda_{\min}$ , indicating stronger shrinkage and a more aggressive reduction of coefficients. The vertical dashed line in the BIC plot marks the location of the selected $\lambda$ , which corresponds to the most parsimonious model under the BIC criterion.
-
+This value is extremely small, indicating that BIC favors very weak
+regularization. Consequently, the selected model retains almost all
+coefficients and behaves nearly identically to the CV-selected Lasso
+model and even to the baseline OLS model.
 
 ```{r use BIC λ to evaluate performance}
 # Predictions using BIC-selected lambda
@@ -763,18 +788,20 @@ R2_train_bic_base; R2_test_bic_base
 RMSE_train_bic_base; RMSE_test_bic_base
 ```
 
-Using the penalty parameter selected by BIC, the Lasso model achieves the following predictive performance:
+```         
+•   Training R² = 0.636
 
-	•	Training $R^2$ = 0.94147
-	
-	•	Test $R^2$ = 0.94002
-	
-	•	Training RMSE = 0.08960
-	
-	•	Test RMSE = 0.08998
+•   Test R² = 0.568
 
-The predictive accuracy of the BIC-selected model is nearly identical to that of the CV-selected Lasso model. But BIC applies a stronger penalty and favors simpler models, it leads to a sparser coefficient structure with more variables shrunk toward zero. This results in a more parsimonious model while maintaining essentially the same out-of-sample accuracy.
+•   Training RMSE = 8244.83
 
+•   Test RMSE = 8591.93
+```
+
+Compared with the CV-selected Lasso model, the BIC-selected λ imposes
+stronger regularization, resulting in a more sparse model with higher
+bias. This leads to lower R² and higher RMSE on both training and test
+sets.
 
 ```{r baseline-summary}
 
@@ -790,12 +817,14 @@ results_baseline <- data.frame(
 results_baseline
 ```
 
-Table reports the test performance of the three baseline linear models.
-The OLS model shows the highest accuracy (test R^2 = 0.9898, RMSE = 0.0371) and explains most of the variation in medical cost. OLS keeps all predictors and applies no coefficient shrinkage.
-
-The two Lasso models—CV and BIC—yield lower accuracy (test $R^2$ $\approx$ 0.94, RMSE ≈ 0.09), but produce more compact models. Lasso shrinks many coefficients toward zero and reduces model complexity. The CV-selected Lasso retains more predictors; the BIC-selected Lasso produces the sparsest structure with similar predictive performance.
-
-Overall, OLS provides the best predictive accuracy, while Lasso offers simpler and more interpretable models, serving as useful baselines for comparison with nonlinear approaches in later sections.
+Among the three baseline linear models, the Lasso versions perform
+slightly better than OLS. The OLS model reaches an R² of about 0.51,
+while Lasso improves it to 0.568 and reduces RMSE from 8644 to 8592,
+meaning more accurate predictions. Interestingly, both CV and BIC choose
+the same λ, so their results are identical. Overall, Lasso helps, but
+the improvement is modest, suggesting that a simple linear model might
+not fully capture the structure of the data and more flexible methods
+may be needed later.
 
 ```{r}
 
@@ -825,11 +854,25 @@ PvR_ols <- ggplot(results_ols, aes(x = preds, y = residuals)) +
 grid.arrange(grobs = list(PvA_ols, PvR_ols), ncol = 2)
 ```
 
-1.
+1.  
 
-The OLS prediction–actual plot shows points concentrated tightly along the 45° line, indicating strong linear fit. The residual plot reveals a clear curved pattern, suggesting non-linearity not captured by the model. Residuals deviate systematically at both low and high predicted values, indicating model misspecification.
+From the OLS prediction plot, the model captures the general upward
+trend, but once the medical charges become large (around 30,000 and
+above), the predictions start to fall noticeably below the 45-degree
+reference line. This indicates that OLS systematically underestimates
+high-cost patients.
 
+The residual plot shows the issue even more clearly. Instead of being
+randomly scattered around zero, the residuals form a curved, structured
+pattern. Lower-cost observations tend to have positive residuals, while
+higher-cost ones have increasingly negative residuals. This pattern
+suggests that the model is missing important nonlinear relationships,
+and its linear structure is not flexible enough to explain the full
+behavior of medical costs.
 
+OLS captures the overall trend but fails to model the nonlinear increase
+in costs, leading to systematic underestimation for high-charge patients
+and a characteristic curved residual pattern.
 
 ```{r}
 # --- CV ---
@@ -861,9 +904,26 @@ PvR_cv <- ggplot(results_cv, aes(x = preds, y = residuals)) +
 grid.arrange(grobs = list(PvA_cv, PvR_cv), ncol = 2)
 ```
 
-2.
+2.  
 
-The CV-selected Lasso model produces a prediction–actual relationship similar to OLS, though slightlymore compressed due to coefficient shrinkage. The residual plot also shows a pronounced curvedpattern, indicating remaining non-linearity. Shrinkage improves model stability but does not resolve the structural deviation visible in residuals.
+In the CV-selected Lasso model, the prediction plot still follows the
+overall trend of the actual charges, but the pattern is very similar to
+OLS. Once the true medical cost becomes large, the predictions remain
+noticeably below the 45-degree reference line. This means that even
+after applying Lasso regularization, the model still underestimates
+high-cost patients.
+
+The residual plot confirms this. The residuals do not scatter randomly
+around zero; instead, they show a clear downward pattern as predictions
+increase. This indicates that errors are systematically related to the
+scale of the predicted cost. In other words, the model is still missing
+key nonlinear relationships, and Lasso shrinkage alone is not enough to
+correct the structural bias.
+
+The Lasso model chosen by cross-validation performs slightly better
+numerically, but the core issue remains—systematic underestimation for
+high-spending individuals and a strong nonlinear residual pattern,
+suggesting that a purely linear model is not flexible enough.
 
 ```{r}
 # --- BIC ---
@@ -893,13 +953,27 @@ grid.arrange(grobs = list(PvA_bic, PvR_bic), ncol = 2)
 
 ```
 
-3.
+3.  
 
-The BIC-selected Lasso model shows nearly identical prediction–actual behavior as the CV model, with even stronger shrinkage leading to a slightly more compressed fit. The residual plot again displays the same curved structure, confirming that model simplification does not address the underlying non-linearity in the data.
+The BIC-selected Lasso model shows prediction patterns almost identical
+to the CV-selected Lasso, which makes sense because both methods choose
+similar λ values. The model captures the general increasing trend, but
+like the other models, it consistently under-predicts high-cost cases,
+and the residual plot again shows a clear downward pattern. This
+indicates remaining nonlinearity in the data that linear
+models—including penalized ones—cannot fully handle.
 
 Summary
 
-Across OLS, CV-Lasso, and BIC-Lasso, prediction accuracy remains high, but all residual plots reveal systematic curvature. This indicates that the baseline linear structure is insufficient and motivates the use of nonlinear terms or more flexible models in later sections.
+Across the baseline OLS model and the Lasso models selected by CV and
+BIC, the overall predictive performance remains limited. Although Lasso
+slightly improves R² and reduces RMSE compared to OLS, all three models
+show the same systematic issue: they consistently underestimate high
+medical charges, and their residuals reveal a strong nonlinear pattern
+that linear models cannot capture. This suggests that medical cost data
+contains complex relationships—likely interactions or nonlinear
+effects—that are beyond the capability of linear or penalized linear
+models.
 
 #### 3.1.4 
 
@@ -1072,6 +1146,7 @@ coef(regfit.bwd,id=min.index)
 plot(1:8, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch=19)
 points(min.index, test.errors[min.index],col = "blue", pch=19)
 ```
+
 #### result
 - Linear regression model with 7 predictors by feature selection:
 ```{r}
@@ -1292,6 +1367,7 @@ dtrain <- xgb.DMatrix(data = as.matrix(train_ori %>% select(-charges)), label = 
 params <- list(
   booster = "gbtree",
   objective = "reg:tweedie", # Importance! This is the target function for regression
+  tweedie_variance_power = 1.1,
   eval_metric = "rmse",       # evaluate model by RMSE
   eta = 0.05,                 # Learning rate
   max_depth = 6,              # max depth of each tree
@@ -1346,31 +1422,24 @@ cat("Testing R-squared:", r_sq, "\n")
 ```
 
 ```{r}
-results <- data.frame(preds = pred, actual = test_ori$charges)
-results$residuals <- results$actual - results$preds
+# 1. Prediction vs Actual (修正 geom_abline)
+ggplot(results, aes(x = preds, y = actual)) +
+  geom_point(alpha = 0.5, color = "darkblue") +  # 加上顏色區分
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed", size = 1) + # 強制設定斜率為1
+  labs(title = "XGBoost: Prediction vs Actual",
+       x = "Predicted Charges (USD)",
+       y = "Actual Charges (USD)") +
+  theme_minimal()
 
-# 1. actual vs predicts (The points should follow 45-degree line.)
-PvA_xgb <- ggplot(results, aes(x = preds, y = actual)) +
-  geom_point(alpha = 0.5) +
-  geom_abline(color = "red") +
-  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
-  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
-  theme_minimal() +
-  labs(title = "Prediction vs Actual")
-
-# 2. Residual Distribution (The points should follow horizontal line.)
-PvR_xgb <- ggplot(results, aes(x = preds, y = residuals)) +
-  geom_point(alpha = 0.5) +
-  geom_hline(yintercept = 0, color = "red") +
-  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
-  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
-  theme_minimal() +
-  labs(title = "Prediction vs Residual")
-
-grid.arrange(grobs = list(PvA_xgb, PvR_xgb), ncol = 2)
-
+# 2. Residual Plot (修正 geom_hline)
+ggplot(results, aes(x = preds, y = residuals)) +
+  geom_point(alpha = 0.5, color = "darkblue") +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed", size = 1) + # 明確指定水平線
+  labs(title = "XGBoost: Residual Analysis",
+       x = "Predicted Charges",
+       y = "Residuals (Actual - Predicted)") +
+  theme_minimal()
 ```
-
 
 ```{r}
 # 1. Compute importance matrix
@@ -1382,3 +1451,320 @@ print(importance_matrix)
 # 3. Draw plot
 xgb.plot.importance(importance_matrix)
 ```
+
+```{r}
+rho <- 1.1 
+
+xgb_df <- data.frame(
+  actuals = test_ori$charges,
+  preds = pred
+)
+
+xgb_df$raw_resid <- xgb_df$actuals - xgb_df$preds
+
+xgb_df$pearson_resid <- (xgb_df$actuals - xgb_df$preds) / (xgb_df$preds^(rho / 2))
+
+p1 <- ggplot(xgb_df, aes(x = preds, y = raw_resid)) +
+  geom_point(alpha = 0.5, color = "black") +
+  geom_hline(yintercept = 0, color = "red") +
+  labs(title = "Raw Residuals (Original)",
+       x = "Predicted Values", y = "y - y_hat") +
+  theme_minimal()
+
+p2 <- ggplot(xgb_df, aes(x = preds, y = pearson_resid)) +
+  geom_point(alpha = 0.5, color = "blue") +
+  geom_hline(yintercept = 0, color = "red") +
+  labs(title = "Pearson Residuals (Corrected)",
+       subtitle = paste0("Standardized by variance power rho = ", rho),
+       x = "Predicted Values", y = "Pearson Residuals") +
+  theme_minimal()
+
+p1
+p2
+```
+
+```{r}
+# 1. Define a threshold for "severe underestimation" (e.g., residual > 10 or 20)
+# These are cases where the model predicted a low cost, but the actual cost was very high.
+outliers <- xgb_df[xgb_df$pearson_resid > 10, ]
+
+# 2. Check the number of these outliers
+print(paste("Number of severely underestimated cases:", nrow(outliers)))
+
+# 3. Print and inspect these cases (viewing the first few rows)
+# You should focus on observing the features of these individuals (Age, BMI, Region, Smoker?).
+# Look for any common patterns that the model might have missed.
+head(outliers)
+
+# 4. Compare the average features of "normal cases" vs. "outliers"
+# This helps you identify feature discrepancies.
+summary(xgb_df)           # Statistics for the entire dataset
+summary(outliers)         # Statistics for the outliers
+```
+
+```{r}
+# 定義異常值與正常值
+outliers_idx <- which(xgb_df$pearson_resid > 10)
+outlier_data <- df_ori[outliers_idx, ]
+normal_data <- df_ori[-outliers_idx, ]
+
+# 建立一個比較函數，直接看比例差異
+compare_props <- function(col_name) {
+  cat("\n--- Comparison for:", col_name, "---\n")
+  
+  # 計算 Outlier 組的比例
+  prop_outlier <- prop.table(table(outlier_data[[col_name]]))
+  cat("Outlier Group Proportions:\n")
+  print(round(prop_outlier, 3))
+  
+  # 計算 Normal 組的比例
+  prop_normal <- prop.table(table(normal_data[[col_name]]))
+  cat("Normal Group Proportions:\n")
+  print(round(prop_normal, 3))
+}
+
+# 執行比較 (針對類別變數)
+compare_props("smoker")
+compare_props("sex")
+compare_props("regionnorthwest") # 依此類推其他區域
+compare_props("children")
+
+# 針對數值變數 (Age, BMI) 檢查平均數或中位數
+cat("\n--- Numeric Comparison ---\n")
+cat("Mean BMI - Outliers:", mean(outlier_data$bmi), " vs Normal:", mean(normal_data$bmi), "\n")
+cat("Mean Age - Outliers:", mean(outlier_data$age), " vs Normal:", mean(normal_data$age), "\n")
+```
+
+```{r}
+# 1. 標記 Outlier 與 Normal
+# 假設 xgb_df 已經存在 (來自 PDF 第 66 頁程式碼)
+outliers_idx <- which(xgb_df$pearson_resid > 10) 
+
+# 建立繪圖用的資料集 (複製一份 df_ori 以免動到原檔)
+plot_df <- df_ori 
+plot_df$Group <- "Normal"
+plot_df$Group[outliers_idx] <- "Outlier"
+
+# 將 Group 轉為因子，確保 Outlier 顯示顏色一致
+plot_df$Group <- factor(plot_df$Group, levels = c("Normal", "Outlier"))
+```
+
+```{r}
+# 定義畫圓餅圖的函數
+draw_comparison_pie <- function(data, variable, title_text) {
+  
+  # 1. 計算百分比
+  pie_data <- data %>%
+    group_by(Group, !!sym(variable)) %>%
+    summarise(count = n(), .groups = 'drop') %>%
+    group_by(Group) %>%
+    mutate(prop = count / sum(count)) %>%
+    mutate(label = sprintf("%1.0f%%", prop * 100)) # 產生百分比標籤
+  
+  # 2. 繪圖
+  # 修改重點：fill = as.factor(!!sym(variable)) 
+  # 這會強制把 0/1 轉成類別，解決 scale_fill_brewer 的報錯
+  ggplot(pie_data, aes(x = "", y = prop, fill = as.factor(!!sym(variable)))) +
+    geom_bar(width = 1, stat = "identity", color = "white") +
+    coord_polar("y", start = 0) +
+    facet_wrap(~Group) + 
+    geom_text(aes(label = label), 
+              position = position_stack(vjust = 0.5), size = 3) +
+    # 設定圖例標題為變數名稱，並指定顏色盤
+    labs(title = title_text, x = NULL, y = NULL, fill = variable) +
+    theme_void() + 
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+          legend.position = "bottom") +
+    scale_fill_brewer(palette = "Pastel1") 
+}
+plot_df <- plot_df %>%
+  mutate(region = case_when(
+    regionnorthwest == 1 ~ "northwest",
+    regionsoutheast == 1 ~ "southeast",
+    regionsouthwest == 1 ~ "southwest",
+    TRUE ~ "northeast"  # 如果以上都是 0，那就是基準組 northeast
+  ))
+
+# --- 重新執行繪圖 ---
+
+# 1. 比較吸菸者 (Smoker)
+p_pie_smoker <- draw_comparison_pie(plot_df, "smokeryes", "Smoker Distribution")
+
+# 2. 比較地區 (Region) -這是新產生的 region 欄位
+p_pie_region <- draw_comparison_pie(plot_df, "region", "Region Distribution")
+
+# 3. 顯示圖表
+p_pie_smoker
+p_pie_region
+```
+
+```{r}
+# 定義畫箱型圖的函數
+draw_comparison_box <- function(data, variable, title_text) {
+  ggplot(data, aes(x = Group, y = !!sym(variable), fill = Group)) +
+    geom_boxplot(alpha = 0.7, outlier.shape = 21, outlier.fill = "white") +
+    labs(title = title_text, x = "", y = variable) +
+    theme_minimal() +
+    theme(legend.position = "none", # 箱型圖不需要圖例，X軸已經很清楚
+          plot.title = element_text(hjust = 0.5, face = "bold"),
+          axis.text.x = element_text(size = 12, face = "bold")) +
+    scale_fill_manual(values = c("Normal" = "#3498db", "Outlier" = "#e74c3c")) # 藍色 vs 紅色
+}
+
+# --- 產生箱型圖 ---
+
+# 1. 比較 BMI
+p_box_bmi <- draw_comparison_box(plot_df, "bmi", "BMI Distribution")
+
+# 2. 比較年齡 (Age)
+p_box_age <- draw_comparison_box(plot_df, "age", "Age Distribution")
+
+# 顯示圖表
+grid.arrange(p_box_bmi, p_box_age, ncol = 2)
+```
+
+##### Conclusion on Xgboost Performance and Error Analysis
+
+The residual analysis confirms that the XGBoost model using the Tweedie
+objective successfully captures the general variance of medical costs.
+However, Pearson residual diagnostics revealed a specific cluster of
+under-predicted outliers ($n=32$).
+
+A detailed inspection shows that these outliers do not possess
+conspicuously higher risk factors compared to the general population.
+Their average BMI ($\approx 30.5$) is similar to the normal group
+($\approx 30.7$), and while they are slightly younger (mean age
+$\approx 36$ vs $39$), their demographic profile does not explicitly
+justify the extreme costs incurred.
+
+Although the outlier group contains a slightly higher proportion of
+smokers (28%) compared to the normal group (20%), the majority are
+non-smokers. The model likely under-predicted these cases because their
+available features (Average BMI, Younger Age) signaled moderate risk,
+yet they incurred high actual expenses. This discrepancy suggests these
+costs are driven by aleatoric uncertainty—likely due to random, acute
+medical events (e.g., accidents or sudden critical illnesses) that
+cannot be predicted by demographic data alone. The model has likely
+reached its performance ceiling with the current feature set.
+
+## 4. Application
+
+Based on the predictive capabilities of our best-performing model
+(XGBoost with Tweedie objective) and the insights gained from the
+exploratory data analysis, we propose several practical applications for
+the insurance industry and healthcare management:
+
+### 4.1 Precision Pricing and Dynamic Premium Adjustment
+
+Traditional actuarial tables often rely on broad demographic brackets.
+Our model demonstrates that non-linear interactions (e.g., BMI \* Smoker
+and Age \* BMI) significantly impact medical costs.
+
+-   Implementation: Insurance companies can deploy this model to
+    calculate Individualized Risk Scores. Instead of a flat rate for all
+    "smokers," the premium can be dynamically adjusted based on the
+    compounding risk of obesity and age.
+
+-   Benefit: This leads to fairer pricing strategies where low-risk
+    individuals are not subsidizing high-risk behaviors, potentially
+    increasing market competitiveness for the insurer.
+
+### 4.2 Targeted Preventative Health Programs
+
+Our feature importance analysis revealed that lifestyle factors (BMI,
+smoking status) are dominant predictors of high costs.
+
+-   Implementation: Insurers can identify high-risk policyholders (e.g.,
+    those in the "pre-high-cost" trajectory) and offer subsidized
+    intervention programs, such as smoking cessation workshops or gym
+    memberships.
+
+-   Benefit: By proactively reducing the risk factors (lowering BMI or
+    stopping smoking), insurers can significantly reduce the probability
+    of catastrophic claims (e.g., cardiovascular events) in the long
+    run, improving the "Loss Ratio."
+
+### 4.3 Fraud Detection and Anomaly Flagging
+
+The error analysis in Section 3.2.2 established a baseline for
+"expected" costs.
+
+-   Implementation: The model can serve as a benchmark engine for claims
+    processing. If a claim amount significantly deviates from the
+    predicted interval (specifically, if Actual Cost \>\> Predicted Cost
+    without a clear medical justification like an accident), it can be
+    automatically flagged for manual review.
+
+-   Benefit: This assists in identifying potential billing errors,
+    over-servicing by providers, or fraudulent claims, thereby reducing
+    operational leakage.
+
+### 4.4 Financial Reserving and Solvency
+
+-   Implementation: On a macro level, the model can predict the
+    aggregate medical expenditure for the entire portfolio of
+    policyholders for the upcoming year.
+
+-   Benefit: This allows the finance department to set aside more
+    accurate cash reserves (Incurred But Not Reported - IBNR reserves),
+    ensuring the company remains solvent while optimizing capital
+    allocation for investments.
+
+## 5. Conclusion
+
+### 5.1 Summary of Findings
+
+In this study, we developed and evaluated a series of statistical
+learning models to predict medical insurance costs.
+
+-   Exploratory Analysis: We identified that the distribution of medical
+    charges is highly right-skewed and heteroscedastic. Key interaction
+    effects, particularly between smoking status and BMI, were found to
+    be the strongest drivers of cost escalation.
+
+-   Model Evolution: We progressed from baseline Linear Regression (OLS)
+    to regularized methods (Lasso), and finally to non-linear tree-based
+    models (Random Forest and XGBoost).
+
+    -   Linear models achieved high $R^2$ but failed to capture the
+        complex structure of residuals.
+
+    -   XGBoost utilizing the Tweedie objective function
+        ($\rho \approx 1.1$) proved to be the superior model. It
+        successfully handled the zero-inflated (compound Poisson-Gamma)
+        nature of medical costs, minimizing the RMSE and standardizing
+        the Pearson residuals.
+
+### 5.2 Limitations: The Challenge of Aleatoric Uncertainty
+
+Despite the high predictive accuracy ($R^2 \approx 0.98$), our residual
+analysis revealed a persistent limitation. A specific cluster of
+outliers—young, non-smoking, healthy individuals with skyrocketing
+costs—remained difficult to predict.
+
+-   Interpretation: These errors likely represent aleatoric
+    uncertainty—random, unpredictable events such as traffic accidents
+    or sudden acute injuries that are independent of demographic or
+    lifestyle data.
+
+-   Constraint: No amount of parameter tuning or model complexity can
+    predict these stochastic events using the current feature set. They
+    represent the inherent risk floor of the insurance business.
+
+### 5.3 Future Directions
+
+To further enhance model performance and business utility, we suggest
+the following improvements:
+
+1.  Integration of Longitudinal Data: Incorporating historical medical
+    claims history (time-series data) rather than a snapshot would allow
+    the model to detect chronic disease progression.
+
+2.  External Data Sources: Adding geospatial data (e.g., pollution
+    levels in the region) or provider data (hospital pricing tiers)
+    could explain regional cost variances.
+
+3.  Two-Stage Modeling: Developing a separate classification model to
+    predict the probability of a major accident/hospitalization,
+    combined with a regression model for cost severity, might better
+    handle the "Black Swan" events identified in our outlier analysis.
