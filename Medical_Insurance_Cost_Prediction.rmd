@@ -20,38 +20,88 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## 1. Introduction
 
-### 1.1 Problem Definition
+Medical insurance cost prediction is an important problem in the field
+of health analytics, where insurers aim to estimate the healthcare
+expenses of individuals based on demographic, lifestyle, and behavioral
+factors. Accurate prediction models allow insurance companies to design
+fair pricing strategies, assess risk, and optimize profitability.
 
-### 1.2 About Dataset
+By leveraging demographic information such as age and sex, lifestyle
+indicators such as BMI and smoking habits, and contextual factors such
+as region, models can provide valuable insights into the drivers of
+medical expenses. This study uses a publicly available medical insurance
+dataset to compare several regression approaches and evaluate their
+predictive performance.
 
-This dataset provides information about 100,000 individuals including
-their demographics, socioeconomic status, health conditions, lifestyle
-factors, Insurance plans, and medical expenditures.
+In the following sections, we conduct exploratory data analysis, build
+multiple predictive models, and compare their performance to identify
+the most effective approach for estimating medical insurance costs.
 
-In detail, the columns are:
+### 1.1 Motivation
 
-1.  Demographics & Socioeconomic: person_id, age, sex, region,
-    urban_rural, income, education, marital_status, employment_status,
-    household_size, dependents
+We chose this topic because medical insurance is something that affects
+everyone, yet the factors that determine medical costs are not always
+obvious. As students, we wanted to explore how personal characteristics
+such as age, BMI, and smoking habits translate into differences in
+expected medical expenses.
 
-2.  Lifestyle & Habits: bmi, smoker, alcohol_freq, exercise_frequency,
-    sleep_hours, stress_level
+By studying this dataset, we can better understand a real issue that
+people encounter in daily life, while also applying statistical learning
+methods to a practical and relatable problem.
 
-3.  Health & Clinical: hypertension, diabetes, copd, cardiovascular,
-    cancer_history, kidney_disease, liver_disease, arthritis,
-    mental_health, chronic_count, systolic_bp, diastolic_bp, ldl, hba1c,
-    risk_score, is_high_risk
+### 1.2 Problem Definition
 
-4.  Healthcare Utilization & Procedures: visits_last_year,
-    hospitalizations_last_3yrs, days_hospitalized_last_3yrs,
-    medication_count, proc_imaging, proc_surgery, proc_psycho,
-    proc_consult_count, proc_lab, had_major
+The primary objective of this study is to predict an individual’s
+medical insurance cost based on demographic and lifestyle
+characteristics. Specifically, we aim to address the following
+questions:
 
-5.  Insurance & Policy: plan_type, network_tier, deductible, copay,
-    policy_term_years, policy_changes_last_2yrs, provider_quality
+#### 1. What are the main factors influencing medical expenses?
 
-6.  Medical Costs & Claims: annual_medical_cost, annual_premium,
-    monthly_premium, claims_count, avg_claim_amount, total_claims_paid
+Understanding these factors helps identify risk contributors and
+supports evidence-based pricing decisions.
+
+#### 2. How accurately can statistical learning models predict medical expenses?
+
+We evaluate multiple regression models—including linear regression,
+regularized models, and non-linear models—to determine their predictive
+performance.
+
+#### 3. How can predictive modeling enhance efficiency and profitability for insurance companies?
+
+Reliable models can improve premium calculations, risk stratification,
+and long-term financial planning.
+
+Through these analyses, our goal is to assess both the interpretability
+and predictive capability of different statistical learning methods.
+\### 1.2 About Dataset
+
+The dataset used in this study is the widely referenced *Medical
+Insurance* dataset from Kaggle, consisting of **2,706 observations and 7
+variables**. Each row represents one insured individual, and the
+variables describe demographic information, lifestyle factors, and the
+corresponding medical insurance charges. The dataset is commonly used as
+a benchmark for regression modeling tasks due to its simplicity and
+interpretability.
+
+The variables included in the dataset are:
+
+| Variable | Description |
+|---------------------------------|---------------------------------------|
+| **age** | Age of the individual |
+| **sex** | Gender (male/female) |
+| **bmi** | Body Mass Index, an indicator of body fat |
+| **children** | Number of dependent children covered by the insurance |
+| **smoker** | Smoking status (smoker / non-smoker) |
+| **region** | Residential region in the United States (northeast, northwest, southeast, southwest) |
+| **charges** | Total medical insurance cost (target variable) |
+
+This dataset allows us to examine how demographic and lifestyle
+characteristics influence medical expenses. In particular, variables
+such as **BMI** and **smoking status** are known to play significant
+roles in driving healthcare costs. The dataset is suitable for
+evaluating both interpretable statistical models and more flexible
+machine learning methods.
 
 ## 2. Exploratory Data Analysis (EDA)
 
@@ -588,7 +638,6 @@ computeR2 <- function(y_pred, y_true, transform = FALSE) {
 
 #### 3.1.1 Multiple Linear Regression Model(Baseline)
 
-
 ```{r baseline-ols}
 # Response variable
 #response_var <- "annual_medical_cost"
@@ -653,6 +702,7 @@ findings imply that more flexible modeling approaches may be required to
 achieve improved predictive performance.
 
 #### 3.1.2 Lasso Linear Regression Model with CV
+
 ```{r lasso-cv-setup}
 
 # Construct design matrices (remove intercept)
@@ -724,6 +774,7 @@ misspecification. Residual diagnostics continue to display curved
 structures, indicating that the linear assumption is insufficient.
 
 #### 3.1.3 Lasso Regression Model with BIC
+
 ```{r fit full Lasso path & compute BIC}
 # Fit full Lasso path on baseline features
 lasso_base <- glmnet(
@@ -977,24 +1028,37 @@ contains complex relationships—likely interactions or nonlinear
 effects—that are beyond the capability of linear or penalized linear
 models.
 
-#### 3.1.4 
+#### 3.1.4 Feature Engineering and Model Selection
 
-### subset selection
+Based on our EDA findings (Section 2.4), we identified a significant
+interaction between BMI and smoking status. The previous linear models
+(3.1.1 - 3.1.3) failed to capture this non-linear relationship,
+resulting in underestimation of high medical costs. In this section, we
+perform feature engineering by explicitly adding interaction terms and
+utilize stepwise selection algorithms to identify the optimal subset of
+predictors.
 
 ```{r}
 train_set = train[,]
 test_set = test[,]
+# add interaction term
+train_set$bmi_smoker <- train_set$bmi * train_set$smokeryes
+test_set$bmi_smoker  <- test_set$bmi * test_set$smokeryes
 
-str(train)
+train_set$age_smoker <- train_set$age * train_set$smokeryes
+test_set$age_smoker  <- test_set$age * test_set$smokeryes
+
 str(train_set)
 
 ```
 
 ```{r}
 set.seed(123)
-regfit.full = regsubsets(charges ~ ., data = train_set)
+regfit.full = regsubsets(charges ~ ., data = train_set, nvmax = 12)
 reg1.summary = summary(regfit.full)
 reg1.summary
+
+num_models <- length(reg1.summary$rss)
 ```
 
 ```{r}
@@ -1004,7 +1068,7 @@ cat("\nSize:", index, "\n")
 cat("Adjusted RSq:", reg1.summary$adjr2[index],"\n")
 coef(regfit.full,index)
 plot(reg1.summary$adjr2, xlab='Number of Variables',ylab='Adjusted RSq',type='b', pch=19)
-points(index,reg1.summary$adjr2[index],col = "blue", pch=19)
+points(index,reg1.summary$adjr2[index],col = "red", pch=19)
 
 
 index = which.min(reg1.summary$bic)
@@ -1012,7 +1076,7 @@ cat("\nSize:", index, "\n")
 cat("BIC:", reg1.summary$bic[index],"\n")
 coef(regfit.full,index)
 plot(reg1.summary$bic, xlab='Number of Variables',ylab='BIC',type='b', pch=19)
-points(index,reg1.summary$bic[index],col = "blue", pch=19)
+points(index,reg1.summary$bic[index],col = "red", pch=19)
 
 ```
 
@@ -1020,8 +1084,8 @@ points(index,reg1.summary$bic[index],col = "blue", pch=19)
 par(mfrow=c(1,2))
 
 test.mat = model.matrix(charges~.,data = test_set)
-test.errors = rep(NA,8)
-for(i in 1:8){
+test.errors = rep(NA,num_models)
+for(i in 1:num_models){
   coefi = coef(regfit.full,id=i)
   intercept = as.vector(coefi)[1]
   pred = test.mat[,names(coefi)] %*% coefi
@@ -1032,23 +1096,24 @@ cat("\nSize:", min.index, "\n")
 cat("Train RMSE:", sqrt(reg1.summary$rss[min.index]/n),"\n")
 coef(regfit.full,id=min.index)
 plot(sqrt((reg1.summary$rss)/n), xlab='Number of Variables',ylab='Train RMSE',type='b',pch=19)
-points(min.index, sqrt(reg1.summary$rss[min.index]/n),col = "blue", pch=19)
+points(min.index, sqrt(reg1.summary$rss[min.index]/n),col = "red", pch=19)
 
 min.index = which.min(test.errors)
 cat("\nSize:", min.index, "\n")
 cat("Test RMSE:", test.errors[min.index],"\n")
 coef(regfit.full,id=min.index)
-plot(1:8, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch=19)
-points(min.index, test.errors[min.index],col = "blue", pch=19)
+plot(1:num_models, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch=19)
+points(min.index, test.errors[min.index],col = "red", pch=19)
 ```
 
-#### forward selection
+##### forward selection
 
 ```{r}
 set.seed(123)
-regfit.fwd = regsubsets(charges~.,data = train_set,method = 'forward')
+regfit.fwd = regsubsets(charges~.,data = train_set,method = 'forward', nvmax = 12)
 reg.fwd.summary = summary(regfit.fwd)
 reg.fwd.summary
+fwd_num_models <- length(reg.fwd.summary$rss)
 ```
 
 ```{r}
@@ -1059,7 +1124,7 @@ cat("\nSize:", index, "\n")
 cat("Adjusted RSq:", reg.fwd.summary$adjr2[index],"\n")
 coef(regfit.fwd,index)
 plot(reg.fwd.summary$adjr2, xlab='Number of Variables',ylab='Adjusted RSq',type='b', pch=19)
-points(index,reg.fwd.summary$adjr2[index],col = "blue", pch=19)
+points(index,reg.fwd.summary$adjr2[index],col = "red", pch=19)
 
 
 index = which.min(reg.fwd.summary$bic)
@@ -1067,15 +1132,15 @@ cat("\nSize:", index, "\n")
 cat("BIC:", reg.fwd.summary$bic[index],"\n")
 coef(regfit.fwd,index)
 plot(reg.fwd.summary$bic, xlab='Number of Variables',ylab='BIC',type='b', pch=19)
-points(index,reg.fwd.summary$bic[index],col = "blue", pch=19)
+points(index,reg.fwd.summary$bic[index],col = "red", pch=19)
 ```
 
 ```{r}
 par(mfrow=c(1,2))
 
 test.mat = model.matrix(charges~.,data = test_set)
-test.errors = rep(NA,8)
-for(i in 1:8){
+test.errors = rep(NA,fwd_num_models)
+for(i in 1:fwd_num_models){
   coefi = coef(regfit.fwd,id=i)
   intercept = as.vector(coefi)[1]
   pred = test.mat[,names(coefi)] %*% coefi
@@ -1086,23 +1151,24 @@ cat("\nSize:", min.index, "\n")
 cat("Train RMSE:", sqrt(reg.fwd.summary$rss[min.index]/n),"\n")
 coef(regfit.fwd,id=min.index)
 plot(sqrt((reg.fwd.summary$rss)/n), xlab='Number of Variables',ylab='Train RMSE',type='b',pch=19)
-points(min.index, sqrt(reg.fwd.summary$rss[min.index]/n),col = "blue", pch=19)
+points(min.index, sqrt(reg.fwd.summary$rss[min.index]/n),col = "red", pch=19)
 
 min.index = which.min(test.errors)
 cat("\nSize:", min.index, "\n")
 cat("Test RMSE:", test.errors[min.index],"\n")
 coef(regfit.fwd,id=min.index)
-plot(1:8, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch=19)
-points(min.index, test.errors[min.index],col = "blue", pch=19)
+plot(1:fwd_num_models, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch=19)
+points(min.index, test.errors[min.index],col = "red", pch=19)
 ```
 
-#### backward selection
+##### backward selection
 
 ```{r}
 set.seed(123)
-regfit.bwd = regsubsets(charges~.,data = train_set,method = 'backward')
+regfit.bwd = regsubsets(charges~.,data = train_set,method = 'backward', nvmax = 12)
 reg.bwd.summary = summary(regfit.bwd)
 reg.bwd.summary
+bwd_num_models <- length(reg.bwd.summary$rss)
 ```
 
 ```{r}
@@ -1113,7 +1179,7 @@ cat("\nSize:", index, "\n")
 cat("Adjusted RSq:", reg.bwd.summary$adjr2[index],"\n")
 coef(regfit.bwd,index)
 plot(reg.bwd.summary$adjr2, xlab='Number of Variables',ylab='Adjusted RSq',type='b', pch=19)
-points(index,reg.bwd.summary$adjr2[index],col = "blue", pch=19)
+points(index,reg.bwd.summary$adjr2[index],col = "red", pch=19)
 
 
 index = which.min(reg.bwd.summary$bic)
@@ -1121,14 +1187,14 @@ cat("\nSize:", index, "\n")
 cat("BIC:", reg.bwd.summary$bic[index],"\n")
 coef(regfit.bwd,index)
 plot(reg.bwd.summary$bic, xlab='Number of Variables',ylab='BIC',type='b', pch=19)
-points(index,reg.bwd.summary$bic[index],col = "blue", pch=19)
+points(index,reg.bwd.summary$bic[index],col = "red", pch=19)
 ```
 
 ```{r}
 par(mfrow = c(1, 2))
 test.mat = model.matrix(charges~.,data = test_set)
-test.errors = rep(NA,8)
-for(i in 1:8){
+test.errors = rep(NA,bwd_num_models)
+for(i in 1:bwd_num_models){
   coefi = coef(regfit.bwd,id=i)
   intercept = as.vector(coefi)[1]
   pred = test.mat[,names(coefi)] %*% coefi
@@ -1139,32 +1205,30 @@ cat("\nSize:", min.index, "\n")
 cat("Train RMSE:", sqrt(reg.bwd.summary$rss[min.index]/n),"\n")
 coef(regfit.bwd,id=min.index)
 plot(sqrt((reg.bwd.summary$rss)/n), xlab='Number of Variables',ylab='Train RMSE',type='b',pch=19)
-points(min.index, sqrt(reg.bwd.summary$rss[min.index]/n),col = "blue", pch=19)
+points(min.index, sqrt(reg.bwd.summary$rss[min.index]/n),col = "red", pch=19)
 
 min.index = which.min(test.errors)
 cat("\nSize:", min.index, "\n")
 cat("Test RMSE:", test.errors[min.index],"\n")
 coef(regfit.bwd,id=min.index)
-plot(1:8, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch=19)
-points(min.index, test.errors[min.index],col = "blue", pch=19)
+plot(1:bwd_num_models, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch=19)
+points(min.index, test.errors[min.index],col = "red", pch=19)
 ```
 
-#### result
-- Linear regression model with 7 predictors by feature selection:
+##### result
+
+-   Linear regression model with 8 predictors by feature selection:
+
 ```{r}
-predictors = setdiff(
-  names(train),
-  c('charges','regionnorthwest')
-)
+predictors_fs <- setdiff(names(train_set), c('charges', 'regionnorthwest'))
 form_fs <- as.formula(
-  paste('charges', "~", paste(predictors, collapse = "+"))
-)
-lm_fs <- lm(form_fs,data = train)
+  paste('charges ~', paste(predictors_fs, collapse = "+")))
+lm_fs <- lm(form_fs,data = train_set)
 summary(lm_fs)
 
 # Predictions
-train_pred_fs <- predict(lm_fs, newdata = train)
-test_pred_fs  <- predict(lm_fs, newdata = test)
+train_pred_fs <- predict(lm_fs, newdata = train_set)
+test_pred_fs  <- predict(lm_fs, newdata = test_set)
 
 # Compute R^2
 y_train <- train$charges
@@ -1184,6 +1248,52 @@ cat('Test R^2:',R2_test,'\n')
 cat('Train RMSE:',RMSE_train,'\n')
 cat('Test RMSE:',RMSE_test,'\n')
 ```
+
+###### Model Conclusion
+
+Overall Model Performance The linear regression model fits the data
+well, explaining approximately 81.4% of the variance in the
+log-transformed medical charges (Adjusted $R^2 = 0.8144$). The
+F-statistic indicates the model is statistically significant
+($p < 2.2e^{-16}$). There is no evidence of significant overfitting, as
+the $R^2$ on the test set ($0.778$) is comparable to the training set
+($0.794$).
+
+Impact of Log-Transformation Since the dependent variable is transformed
+using log1p, the coefficients should be interpreted as approximate
+percentage changes in medical charges (for small coefficients) or
+requiring exponentiation ($e^\beta - 1$) for larger effects.
+
+Key Drivers and Interactions
+
+-   Smoking Status: This is the most dominant factor. The base
+    coefficient for smokeryes (1.196) suggests that, holding other
+    variables constant, smoking leads to a massive increase in predicted
+    charges (over 200% on the original scale).
+
+-   BMI and Smoking Interaction: While bmi alone is not statistically
+    significant ($p=0.823$), the interaction term bmi:smoker is highly
+    significant and positive ($0.053$). This indicates that BMI
+    significantly increases medical costs only for smokers, acting as a
+    major risk multiplier.
+
+-   Age Dynamics: Generally, costs increase with age (age coeff:
+    $0.041$). However, the negative interaction term age:smoker
+    ($-0.033$) suggests that the rate of cost increase due to age is
+    actually less steep for smokers compared to non-smokers, likely
+    because smokers already start at a much higher cost baseline.
+
+-   Other Demographics:
+
+    -   Children: Each additional child is associated with an increase
+        in costs ($\beta \approx 0.106$).
+
+    -   Sex: Males have slightly lower predicted costs than females
+        ($\beta \approx -0.083$), holding all else constant.
+
+    -   Region: Residents in the Southeast and Southwest have
+        significantly lower costs compared to the reference region
+        (Northeast or Northwest).
 
 ```{r}
 results <- data.frame(preds = expm1(test_pred_fs), actual = expm1(test_set$charges) )
@@ -1207,15 +1317,26 @@ PvR_fs <- ggplot(results, aes(x = preds, y = residuals)) +
   scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
   labs(title = "Prediction vs Residuals")
 
-grid.arrange(grobs = list(PvA_fs, PvR_fs), ncol = 2)
-
+PvA_fs
+PvR_fs
 ```
 
 ### 3.2 Tree-based Model (Non-parametric)
-  Tree-based models are more flexible non-parametric methods that don't assume a specific functional form between predictors and the response variable. Because they don't rely on data distributional assumptions, these methods are generally more robust in the presence of outliers. Therefore, we apply tree-based models to effectively capture the non-linear and complex relationships in our dataset.
-  In this section, we compare performance of two tree-based models. In particular, we will train random forest and XGBoost models, representing aggregation and boosting methods, respectively. Later, we will also compare the performance of the best non-parametric model(from the tree-based models) with the best parametric model from the previous section.
-  
-- Data Setup
+
+Tree-based models are more flexible non-parametric methods that don't
+assume a specific functional form between predictors and the response
+variable. Because they don't rely on data distributional assumptions,
+these methods are generally more robust in the presence of outliers.
+Therefore, we apply tree-based models to effectively capture the
+non-linear and complex relationships in our dataset. In this section, we
+compare performance of two tree-based models. In particular, we will
+train random forest and XGBoost models, representing aggregation and
+boosting methods, respectively. Later, we will also compare the
+performance of the best non-parametric model(from the tree-based models)
+with the best parametric model from the previous section.
+
+-   Data Setup
+
 ```{r}
 # --- Variable Setup ---
 # response variable (target)
@@ -1233,8 +1354,12 @@ y_test <- test_ori[,response_var]
 ```
 
 #### 3.2.1 Random Forest
-  
-  Random Forest(RF) is the model based on aggregation(bagging) method which is robust in reducing variance and preventing overfitting. In our implementation, we use caret::train() with 200 trees and employ 5-fold cross-validation(CV) to determine the optimal number of features and evaluate the model's performance under the best parameter setting.
+
+Random Forest(RF) is the model based on aggregation(bagging) method
+which is robust in reducing variance and preventing overfitting. In our
+implementation, we use caret::train() with 200 trees and employ 5-fold
+cross-validation(CV) to determine the optimal number of features and
+evaluate the model's performance under the best parameter setting.
 
 ```{r}
 
@@ -1281,7 +1406,11 @@ rf_cv
 varImp(rf_cv)
 
 ```
-Based on the result, the optimal number of features for the RF model is 5, which achieves the highest $R^2$ and the lowest RMSE. In terms of variable importance, *smoker*, *bmi*, *children* are the three most importance variable in our RF model.
+
+Based on the result, the optimal number of features for the RF model is
+5, which achieves the highest $R^2$ and the lowest RMSE. In terms of
+variable importance, *smoker*, *bmi*, *children* are the three most
+importance variable in our RF model.
 
 ```{r}
 
@@ -1309,8 +1438,11 @@ cat("Testing R2:   ", rf_test_R2, "\n")
 
 
 ```
-  With our optimal parameter setting, the RF model achieves a testing $R^2$ of 0.948, indicating strong predictive ability, and a testing RMSE of 2822.49, suggesting that on the unseen data the average prediction error in medical costs is approximately 2,800 USD.
 
+With our optimal parameter setting, the RF model achieves a testing
+$R^2$ of 0.948, indicating strong predictive ability, and a testing RMSE
+of 2822.49, suggesting that on the unseen data the average prediction
+error in medical costs is approximately 2,800 USD.
 
 ```{r}
 
@@ -1353,13 +1485,24 @@ PvR_rf <- ggplot(plot_data, aes(x = Predicted, y = Residuals)) +
 
 grid.arrange(grobs = list(PvA_rf, PvR_rf), ncol = 2)
 ```
-  In the plot of Predictions vs. Actual values, the points generally follow a 45-degree line, indicating good agreement between predicted and actual values. In the plot of Predictions vs. Residuals, most points are distributed near a horizontal line, suggesting that the residuals are randomly scattered around zero.
-We can say the performance of RF model is quite well.
+
+In the plot of Predictions vs. Actual values, the points generally
+follow a 45-degree line, indicating good agreement between predicted and
+actual values. In the plot of Predictions vs. Residuals, most points are
+distributed near a horizontal line, suggesting that the residuals are
+randomly scattered around zero. We can say the performance of RF model
+is quite well.
 
 #### 3.2.2 XGBoost
 
-  XGBoost (XGB) is a gradient boosting model that builds trees sequentially, with each new tree learning to correct the errors of the previous ones. This approach allows the model to capture complex non-linear relationships and subtle interactions between features. In our analysis, we use cross-validation to determine the optimal number of boosting rounds and train the final model with the best parameter settings.
-  
+XGBoost (XGB) is a gradient boosting model that builds trees
+sequentially, with each new tree learning to correct the errors of the
+previous ones. This approach allows the model to capture complex
+non-linear relationships and subtle interactions between features. In
+our analysis, we use cross-validation to determine the optimal number of
+boosting rounds and train the final model with the best parameter
+settings.
+
 ```{r}
 # ==========================================
 #  XGBoost with CV
@@ -1422,7 +1565,25 @@ cat("Testing RMSE (USD):", rmse, "\n")
 r_sq <- computeR2(pred_xgb, y_test)
 cat("Testing R-squared:", r_sq, "\n")
 ```
-  With our optimal parameter setting, the XGB model achieves a testing $R^2$ of 0.963, indicating the outstanding predictive ability, and a testing RMSE of 2378.16, suggesting that on the unseen data the average prediction error in medical costs is approximately 2,400 USD.
+
+With our optimal parameter setting, the XGB model achieves a testing
+$R^2$ of 0.963, indicating the outstanding predictive ability, and a
+testing RMSE of 2378.16, suggesting that on the unseen data the average
+prediction error in medical costs is approximately 2,400 USD.
+
+```{r}
+# 1. Compute importance matrix
+importance_matrix <- xgb.importance(feature_names = colnames(dtrain), model = final_model)
+
+# 2. View feature importance
+print(importance_matrix)
+
+# 3. Draw plot
+xgb.plot.importance(importance_matrix)
+```
+
+According to the feature importance matrix, we can find *smoker*, *bmi*,
+*age* which are also the most three important feature in XGB model.
 
 ```{r}
 plot_xgb <- data.frame(
@@ -1450,20 +1611,9 @@ PvR_xgb <- ggplot(plot_xgb, aes(x = preds, y = residuals)) +
        y = "Residuals (Actual - Predicted)") +
   theme_minimal()
 
-grid.arrange(grobs = list(PvA_xgb, PvR_xgb), ncol = 2)
+PvA_xgb
+PvR_xgb
 ```
-
-```{r}
-# 1. Compute importance matrix
-importance_matrix <- xgb.importance(feature_names = colnames(dtrain), model = final_model)
-
-# 2. View feature importance
-print(importance_matrix)
-
-# 3. Draw plot
-xgb.plot.importance(importance_matrix)
-```
-  According to the feature importance matrix, we can find *smoker*, *bmi*, *age* which are also the most three important feature in XGB model.
 
 ```{r}
 rho <- 1.1 
@@ -1480,24 +1630,25 @@ xgb_df$pearson_resid <- (xgb_df$actuals - xgb_df$preds) / (xgb_df$preds^(rho / 2
 p1 <- ggplot(xgb_df, aes(x = preds, y = raw_resid)) +
   geom_point(alpha = 0.5, color = "black") +
   geom_hline(yintercept = 0, color = "red") +
-  labs(title = "Raw Residuals (Original)",
+  labs(title = "XGBoost Raw Residuals (Original)",
        x = "Predicted Values", y = "y - y_hat") +
   theme_minimal()
 
 p2 <- ggplot(xgb_df, aes(x = preds, y = pearson_resid)) +
   geom_point(alpha = 0.5, color = "blue") +
   geom_hline(yintercept = 0, color = "red") +
-  labs(title = "Pearson Residuals (Corrected)",
+  labs(title = "XGBoost Pearson Residuals (Corrected)",
        subtitle = paste0("Standardized by variance power rho = ", rho),
        x = "Predicted Values", y = "Pearson Residuals") +
   theme_minimal()
 
 
-grid.arrange(grobs = list(p1, p2), ncol = 2)
+p1
+p2
 ```
 
 ```{r}
-# 1. Define a threshold for "severe underestimation" (e.g., residual > 10 or 20)
+# 1. Define a threshold for "severe underestimation" (residual > 10)
 # These are cases where the model predicted a low cost, but the actual cost was very high.
 outliers <- xgb_df[xgb_df$pearson_resid > 10, ]
 
@@ -1505,12 +1656,9 @@ outliers <- xgb_df[xgb_df$pearson_resid > 10, ]
 print(paste("Number of severely underestimated cases:", nrow(outliers)))
 
 # 3. Print and inspect these cases (viewing the first few rows)
-# You should focus on observing the features of these individuals (Age, BMI, Region, Smoker?).
-# Look for any common patterns that the model might have missed.
 head(outliers)
 
 # 4. Compare the average features of "normal cases" vs. "outliers"
-# This helps you identify feature discrepancies.
 summary(xgb_df)           # Statistics for the entire dataset
 summary(outliers)         # Statistics for the outliers
 ```
@@ -1521,7 +1669,7 @@ outliers_idx <- which(xgb_df$pearson_resid > 10)
 outlier_data <- df_ori[outliers_idx, ]
 normal_data <- df_ori[-outliers_idx, ]
 
-# 建立一個比較函數，直接看比例差異
+# 建立一個比較函數，看比例差異
 compare_props <- function(col_name) {
   cat("\n--- Comparison for:", col_name, "---\n")
   
@@ -1539,7 +1687,6 @@ compare_props <- function(col_name) {
 # 執行比較 (針對類別變數)
 compare_props("smoker")
 compare_props("sex")
-compare_props("regionnorthwest") # 依此類推其他區域
 compare_props("children")
 
 # 針對數值變數 (Age, BMI) 檢查平均數或中位數
@@ -1549,11 +1696,6 @@ cat("Mean Age - Outliers:", mean(outlier_data$age), " vs Normal:", mean(normal_d
 ```
 
 ```{r}
-# 1. 標記 Outlier 與 Normal
-# 假設 xgb_df 已經存在 (來自 PDF 第 66 頁程式碼)
-outliers_idx <- which(xgb_df$pearson_resid > 10) 
-
-# 建立繪圖用的資料集 (複製一份 df_ori 以免動到原檔)
 plot_df <- df_ori 
 plot_df$Group <- "Normal"
 plot_df$Group[outliers_idx] <- "Outlier"
@@ -1575,8 +1717,8 @@ draw_comparison_pie <- function(data, variable, title_text) {
     mutate(label = sprintf("%1.0f%%", prop * 100)) # 產生百分比標籤
   
   # 2. 繪圖
-  # 修改重點：fill = as.factor(!!sym(variable)) 
-  # 這會強制把 0/1 轉成類別，解決 scale_fill_brewer 的報錯
+  # fill = as.factor(!!sym(variable)) 
+  # 強制把 0/1 轉成類別，解決 scale_fill_brewer 的報錯
   ggplot(pie_data, aes(x = "", y = prop, fill = as.factor(!!sym(variable)))) +
     geom_bar(width = 1, stat = "identity", color = "white") +
     coord_polar("y", start = 0) +
@@ -1618,10 +1760,10 @@ draw_comparison_box <- function(data, variable, title_text) {
     geom_boxplot(alpha = 0.7, outlier.shape = 21, outlier.fill = "white") +
     labs(title = title_text, x = "", y = variable) +
     theme_minimal() +
-    theme(legend.position = "none", # 箱型圖不需要圖例，X軸已經很清楚
+    theme(legend.position = "none",
           plot.title = element_text(hjust = 0.5, face = "bold"),
           axis.text.x = element_text(size = 12, face = "bold")) +
-    scale_fill_manual(values = c("Normal" = "#3498db", "Outlier" = "#e74c3c")) # 藍色 vs 紅色
+    scale_fill_manual(values = c("Normal" = "#3498db", "Outlier" = "#e74c3c"))
 }
 
 # --- 產生箱型圖 ---
@@ -1749,7 +1891,7 @@ learning models to predict medical insurance costs.
 
 ### 5.2 Limitations: The Challenge of Aleatoric Uncertainty
 
-Despite the high predictive accuracy ($R^2 \approx 0.98$), our residual
+Despite the high predictive accuracy ($R^2 \approx 0.96$), our residual
 analysis revealed a persistent limitation. A specific cluster of
 outliers—young, non-smoking, healthy individuals with skyrocketing
 costs—remained difficult to predict.
