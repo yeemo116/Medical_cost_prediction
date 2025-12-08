@@ -1307,7 +1307,7 @@ cat("Testing R2:   ", rf_test_R2, "\n")
 
 
 ```
-With our optimal parameter setting, the model achieves a testing $R^2$ of 0.948, indicating strong predictive ability, and a testing RMSE of 2822.49, suggesting that on the unseen data the average prediction error in medical costs is approximately 2,800 USD.
+  With our optimal parameter setting, the RF model achieves a testing $R^2$ of 0.948, indicating strong predictive ability, and a testing RMSE of 2822.49, suggesting that on the unseen data the average prediction error in medical costs is approximately 2,800 USD.
 
 
 ```{r}
@@ -1315,8 +1315,6 @@ With our optimal parameter setting, the model achieves a testing $R^2$ of 0.948,
 # ==========================================
 #  Prediction and Residual Plot
 # ==========================================
-
-
 
 # Build plot DataFrame
 plot_data <- data.frame(
@@ -1354,10 +1352,12 @@ PvR_rf <- ggplot(plot_data, aes(x = Predicted, y = Residuals)) +
 grid.arrange(grobs = list(PvA_rf, PvR_rf), ncol = 2)
 ```
   In the plot of Predictions vs. Actual values, the points generally follow a 45-degree line, indicating good agreement between predicted and actual values. In the plot of Predictions vs. Residuals, most points are distributed near a horizontal line, suggesting that the residuals are randomly scattered around zero.
-We can say the performance of this model is quite well.
+We can say the performance of RF model is quite well.
 
 #### 3.2.2 XGBoost
 
+  XGBoost (XGB) is a gradient boosting model that builds trees sequentially, with each new tree learning to correct the errors of the previous ones. This approach allows the model to capture complex non-linear relationships and subtle interactions between features. In our analysis, we use cross-validation to determine the optimal number of boosting rounds and train the final model with the best parameter settings.
+  
 ```{r}
 # ==========================================
 #  XGBoost with CV
@@ -1420,10 +1420,11 @@ cat("Testing RMSE (USD):", rmse, "\n")
 r_sq <- computeR2(pred, y_test)
 cat("Testing R-squared:", r_sq, "\n")
 ```
+  With our optimal parameter setting, the XGB model achieves a testing $R^2$ of 0.963, indicating the outstanding predictive ability, and a testing RMSE of 2378.16, suggesting that on the unseen data the average prediction error in medical costs is approximately 2,400 USD.
 
 ```{r}
 # 1. Prediction vs Actual (修正 geom_abline)
-ggplot(results, aes(x = preds, y = actual)) +
+PvA_xgb <- ggplot(results, aes(x = preds, y = actual)) +
   geom_point(alpha = 0.5, color = "darkblue") +  # 加上顏色區分
   geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed", size = 1) + # 強制設定斜率為1
   labs(title = "XGBoost: Prediction vs Actual",
@@ -1432,25 +1433,28 @@ ggplot(results, aes(x = preds, y = actual)) +
   theme_minimal()
 
 # 2. Residual Plot (修正 geom_hline)
-ggplot(results, aes(x = preds, y = residuals)) +
+PvR_xgb <- ggplot(results, aes(x = preds, y = residuals)) +
   geom_point(alpha = 0.5, color = "darkblue") +
   geom_hline(yintercept = 0, color = "red", linetype = "dashed", size = 1) + # 明確指定水平線
   labs(title = "XGBoost: Residual Analysis",
        x = "Predicted Charges",
        y = "Residuals (Actual - Predicted)") +
   theme_minimal()
+
+grid.arrange(grobs = list(PvA_xgb, PvR_xgb), ncol = 2)
 ```
 
 ```{r}
 # 1. Compute importance matrix
 importance_matrix <- xgb.importance(feature_names = colnames(dtrain), model = final_model)
 
-# 2. Watch parameters
+# 2. View feature importance
 print(importance_matrix)
 
 # 3. Draw plot
 xgb.plot.importance(importance_matrix)
 ```
+According to the feature importance matrix, we can find *smoker*, *bmi*, *age* which are also the most three important feature in XGB model.
 
 ```{r}
 rho <- 1.1 
@@ -1479,8 +1483,8 @@ p2 <- ggplot(xgb_df, aes(x = preds, y = pearson_resid)) +
        x = "Predicted Values", y = "Pearson Residuals") +
   theme_minimal()
 
-p1
-p2
+
+grid.arrange(grobs = list(p1, p2), ncol = 2)
 ```
 
 ```{r}
