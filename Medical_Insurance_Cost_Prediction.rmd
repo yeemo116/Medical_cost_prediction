@@ -1135,9 +1135,9 @@ grid.arrange(grobs = list(PvA_fs, PvR_fs), ncol = 2)
 ```
 
 ### 3.2 Tree-based Model (Non-parametric)
-  Tree-based models are more flexible non-parametric methods that don't assume a specific functional form between predictors and response. They can effectively capture the non-linear and complex relationships in the datasets.
-  In this section, we want apply non-parametric models to compare with the parametric models in the previous section. In particular, we train random forest and XGBoost models, representing  aggregation and boosting methods, respectively. We also compare their performance of these two models.
-
+  Tree-based models are more flexible non-parametric methods that don't assume a specific functional form between predictors and the response variable. Because they don't rely on data distributional assumptions, these methods are generally more robust in the presence of outliers. Therefore, we apply tree-based models to effectively capture the non-linear and complex relationships in our dataset.
+  In this section, we compare performance of two tree-based models. In particular, we will train random forest and XGBoost models, representing aggregation and boosting methods, respectively. Later, we will also compare the performance of the best non-parametric model(from the tree-based models) with the best parametric model from the previous section.
+  
 - Data Setup
 ```{r}
 # --- Variable Setup ---
@@ -1156,6 +1156,8 @@ y_test <- test_ori[,response_var]
 ```
 
 #### 3.2.1 Random Forest
+  
+  Random Forest(RF) is the model based on aggregation(bagging) method which is robust in reducing variance and preventing overfitting. In our implementation, we use caret::train() with 200 trees and employ 5-fold cross-validation(CV) to determine the optimal number of features and evaluate the model's performance under the best parameter setting.
 
 ```{r}
 
@@ -1202,7 +1204,7 @@ rf_cv
 varImp(rf_cv)
 
 ```
-The best number of features for the random forest is 5, which has the highest $R^2$ and the lowest RMSE.
+Based on the result, the optimal number of features for the RF model is 5, which achieves the highest $R^2$ and the lowest RMSE. In terms of variable importance, *smoker*, *bmi*, *children* are the three most importance variable in our RF model.
 
 ```{r}
 
@@ -1230,7 +1232,7 @@ cat("Testing R2:   ", rf_test_R2, "\n")
 
 
 ```
-
+With our optimal parameter setting, the model achieves a testing $R^2$ of 0.948, indicating strong predictive ability, and a testing RMSE of 2822.49, suggesting that on the unseen data the average prediction error in medical costs is approximately 2,800 USD.
 
 
 ```{r}
@@ -1276,6 +1278,8 @@ PvR_rf <- ggplot(plot_data, aes(x = Predicted, y = Residuals)) +
 
 grid.arrange(grobs = list(PvA_rf, PvR_rf), ncol = 2)
 ```
+  In the plot of Predictions vs. Actual values, the points generally follow a 45-degree line, indicating good agreement between predicted and actual values. In the plot of Predictions vs. Residuals, most points are distributed near a horizontal line, suggesting that the residuals are randomly scattered around zero.
+We can say the performance of this model is quite well.
 
 #### 3.2.2 XGBoost
 
