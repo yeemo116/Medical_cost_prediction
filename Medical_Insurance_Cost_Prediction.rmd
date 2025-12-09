@@ -1042,20 +1042,23 @@ contains complex relationships—likely interactions or nonlinear
 effects—that are beyond the capability of linear or penalized linear
 models.
 
+
 #### 3.1.4 Feature Engineering and Model Selection
+
+##### Regression with interaction terms
 
 Based on our EDA findings (Section 2.4), we identified a significant
 interaction between BMI and smoking status. The previous linear models
 (3.1.1 - 3.1.3) failed to capture this non-linear relationship,
 resulting in underestimation of high medical costs. In this section, we
 perform feature engineering by explicitly adding interaction terms and
-utilize stepwise selection algorithms to identify the optimal subset of
+utilize model selection algorithms to identify the optimal subset of
 predictors.
 
 ```{r}
 train_set = train[,]
 test_set = test[,]
-# add interaction term
+# add interaction term to original dataset
 train_set$bmi_smoker <- train_set$bmi * train_set$smokeryes
 test_set$bmi_smoker  <- test_set$bmi * test_set$smokeryes
 
@@ -1063,18 +1066,15 @@ train_set$age_smoker <- train_set$age * train_set$smokeryes
 test_set$age_smoker  <- test_set$age * test_set$smokeryes
 
 str(train_set)
-
 ```
-
+In the below plot of different model performance metrics to the number of variables. When feature subset size = 8, the regression model has the lowest test RMSE. The selected features are the 2 interaction terms and other 6 features, removing `bmi` and `regionnorthwest`.
 ```{r}
 set.seed(123)
 regfit.full = regsubsets(charges ~ ., data = train_set, nvmax = 12)
 reg1.summary = summary(regfit.full)
 reg1.summary
-
 num_models <- length(reg1.summary$rss)
 ```
-
 ```{r}
 par(mfrow=c(1,2))
 index = which.max(reg1.summary$adjr2)
@@ -1093,7 +1093,6 @@ plot(reg1.summary$bic, xlab='Number of Variables',ylab='BIC',type='b', pch=19)
 points(index,reg1.summary$bic[index],col = "red", pch=19)
 
 ```
-
 ```{r}
 par(mfrow=c(1,2))
 
@@ -1119,122 +1118,10 @@ coef(regfit.full,id=min.index)
 plot(1:num_models, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch=19)
 points(min.index, test.errors[min.index],col = "red", pch=19)
 ```
-
-##### forward selection
-
-```{r}
-set.seed(123)
-regfit.fwd = regsubsets(charges~.,data = train_set,method = 'forward', nvmax = 12)
-reg.fwd.summary = summary(regfit.fwd)
-reg.fwd.summary
-fwd_num_models <- length(reg.fwd.summary$rss)
-```
-
-```{r}
-par(mfrow=c(1,2))
-
-index = which.max(reg.fwd.summary$adjr2)
-cat("\nSize:", index, "\n")
-cat("Adjusted RSq:", reg.fwd.summary$adjr2[index],"\n")
-coef(regfit.fwd,index)
-plot(reg.fwd.summary$adjr2, xlab='Number of Variables',ylab='Adjusted RSq',type='b', pch=19)
-points(index,reg.fwd.summary$adjr2[index],col = "red", pch=19)
-
-
-index = which.min(reg.fwd.summary$bic)
-cat("\nSize:", index, "\n")
-cat("BIC:", reg.fwd.summary$bic[index],"\n")
-coef(regfit.fwd,index)
-plot(reg.fwd.summary$bic, xlab='Number of Variables',ylab='BIC',type='b', pch=19)
-points(index,reg.fwd.summary$bic[index],col = "red", pch=19)
-```
-
-```{r}
-par(mfrow=c(1,2))
-
-test.mat = model.matrix(charges~.,data = test_set)
-test.errors = rep(NA,fwd_num_models)
-for(i in 1:fwd_num_models){
-  coefi = coef(regfit.fwd,id=i)
-  intercept = as.vector(coefi)[1]
-  pred = test.mat[,names(coefi)] %*% coefi
-  test.errors[i] = sqrt(mean((test_set$charges - pred)^2))
-}
-min.index = which.min(reg.fwd.summary$rss)
-cat("\nSize:", min.index, "\n")
-cat("Train RMSE:", sqrt(reg.fwd.summary$rss[min.index]/n),"\n")
-coef(regfit.fwd,id=min.index)
-plot(sqrt((reg.fwd.summary$rss)/n), xlab='Number of Variables',ylab='Train RMSE',type='b',pch=19)
-points(min.index, sqrt(reg.fwd.summary$rss[min.index]/n),col = "red", pch=19)
-
-min.index = which.min(test.errors)
-cat("\nSize:", min.index, "\n")
-cat("Test RMSE:", test.errors[min.index],"\n")
-coef(regfit.fwd,id=min.index)
-plot(1:fwd_num_models, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch=19)
-points(min.index, test.errors[min.index],col = "red", pch=19)
-```
-
-##### backward selection
-
-```{r}
-set.seed(123)
-regfit.bwd = regsubsets(charges~.,data = train_set,method = 'backward', nvmax = 12)
-reg.bwd.summary = summary(regfit.bwd)
-reg.bwd.summary
-bwd_num_models <- length(reg.bwd.summary$rss)
-```
-
-```{r}
-par(mfrow=c(1,2))
-
-index = which.max(reg.bwd.summary$adjr2)
-cat("\nSize:", index, "\n")
-cat("Adjusted RSq:", reg.bwd.summary$adjr2[index],"\n")
-coef(regfit.bwd,index)
-plot(reg.bwd.summary$adjr2, xlab='Number of Variables',ylab='Adjusted RSq',type='b', pch=19)
-points(index,reg.bwd.summary$adjr2[index],col = "red", pch=19)
-
-
-index = which.min(reg.bwd.summary$bic)
-cat("\nSize:", index, "\n")
-cat("BIC:", reg.bwd.summary$bic[index],"\n")
-coef(regfit.bwd,index)
-plot(reg.bwd.summary$bic, xlab='Number of Variables',ylab='BIC',type='b', pch=19)
-points(index,reg.bwd.summary$bic[index],col = "red", pch=19)
-```
-
-```{r}
-par(mfrow = c(1, 2))
-test.mat = model.matrix(charges~.,data = test_set)
-test.errors = rep(NA,bwd_num_models)
-for(i in 1:bwd_num_models){
-  coefi = coef(regfit.bwd,id=i)
-  intercept = as.vector(coefi)[1]
-  pred = test.mat[,names(coefi)] %*% coefi
-  test.errors[i] = sqrt(mean((test_set$charges - pred)^2))
-}
-min.index = which.min(reg.bwd.summary$rss)
-cat("\nSize:", min.index, "\n")
-cat("Train RMSE:", sqrt(reg.bwd.summary$rss[min.index]/n),"\n")
-coef(regfit.bwd,id=min.index)
-plot(sqrt((reg.bwd.summary$rss)/n), xlab='Number of Variables',ylab='Train RMSE',type='b',pch=19)
-points(min.index, sqrt(reg.bwd.summary$rss[min.index]/n),col = "red", pch=19)
-
-min.index = which.min(test.errors)
-cat("\nSize:", min.index, "\n")
-cat("Test RMSE:", test.errors[min.index],"\n")
-coef(regfit.bwd,id=min.index)
-plot(1:bwd_num_models, test.errors,xlab='Number of variables', ylab='Test RMSE',type="b", pch=19)
-points(min.index, test.errors[min.index],col = "red", pch=19)
-```
-
-##### result
-
+**Result**
 -   Linear regression model with 8 predictors by feature selection:
-
 ```{r}
-predictors_fs <- setdiff(names(train_set), c('charges', 'regionnorthwest'))
+predictors_fs <- setdiff(names(train_set), c('charges', 'regionnorthwest','bmi'))
 form_fs <- as.formula(
   paste('charges ~', paste(predictors_fs, collapse = "+")))
 lm_fs <- lm(form_fs,data = train_set)
@@ -1248,24 +1135,19 @@ test_pred_fs  <- predict(lm_fs, newdata = test_set)
 y_train <- train$charges
 y_test  <- test$charges
 
-R2_train_fs <- computeR2(train_pred_fs, y_train, TRUE)
-#  1 - sum((y_train - train_pred)^2) / sum((y_train - mean(y_train))^2)
-R2_test_fs  <- computeR2(test_pred_fs, y_test, TRUE) 
-#  1 - sum((y_test - test_pred_fs)^2) / sum((y_test - mean(y_test))^2)
+R2_train_fs2 <- computeR2(train_pred_fs, y_train, TRUE)
+R2_test_fs2  <- computeR2(test_pred_fs, y_test, TRUE) 
 
 # Compute RMSE
-RMSE_train_fs <- computeRMSE(train_pred_fs, y_train, TRUE)
-RMSE_test_fs  <- computeRMSE(test_pred_fs, y_test, TRUE)
+RMSE_train_fs2 <- computeRMSE(train_pred_fs, y_train, TRUE)
+RMSE_test_fs2  <- computeRMSE(test_pred_fs, y_test, TRUE)
 
-cat('Train R^2:',R2_train_fs,'\n')
-cat('Test R^2:',R2_test_fs,'\n')
-cat('Train RMSE:',RMSE_train_fs,'\n')
-cat('Test RMSE:',RMSE_test_fs,'\n')
+cat('Train R^2:',R2_train_fs2,'\n')
+cat('Test R^2:',R2_test_fs2,'\n')
+cat('Train RMSE:',RMSE_train_fs2,'\n')
+cat('Test RMSE:',RMSE_test_fs2,'\n')
 ```
-
-##### Model Conclusion
-
-Overall Model Performance The linear regression model fits the data
+The linear regression model fits the data
 well, explaining approximately 81.4% of the variance in the
 log-transformed medical charges (Adjusted $R^2 = 0.8144$). The
 F-statistic indicates the model is statistically significant
@@ -1273,7 +1155,9 @@ F-statistic indicates the model is statistically significant
 the $R^2$ on the test set ($0.778$) is comparable to the training set
 ($0.794$).
 
-Impact of Log-Transformation Since the dependent variable is transformed
+Impact of Log-Transformation
+
+Since the dependent variable is transformed
 using log1p, the coefficients should be interpreted as approximate
 percentage changes in medical charges (for small coefficients) or
 requiring exponentiation ($e^\beta - 1$) for larger effects.
@@ -1281,12 +1165,11 @@ requiring exponentiation ($e^\beta - 1$) for larger effects.
 Key Drivers and Interactions
 
 -   Smoking Status: This is the most dominant factor. The base
-    coefficient for smokeryes (1.196) suggests that, holding other
+    coefficient for smokeryes (1.861) suggests that, holding other
     variables constant, smoking leads to a massive increase in predicted
-    charges (over 200% on the original scale).
+    charges.
 
--   BMI and Smoking Interaction: While bmi alone is not statistically
-    significant ($p=0.823$), the interaction term bmi:smoker is highly
+-   BMI and Smoking Interaction: The interaction term bmi:smoker is highly
     significant and positive ($0.053$). This indicates that BMI
     significantly increases medical costs only for smokers, acting as a
     major risk multiplier.
@@ -1297,42 +1180,121 @@ Key Drivers and Interactions
     actually less steep for smokers compared to non-smokers, likely
     because smokers already start at a much higher cost baseline.
 
--   Other Demographics:
+##### Regression with pairwise interaction
+  In the last section, we manually add interaction terms as features, and use function for model selection, which can find the optimal feature subset. Now we try to put all pairwise interaction terms into consideration, and see if some feature interactions are influential in the linear regression model prediction. The regression model will take all predictors and all pairwise interaction terms as features, which is 36 features to be exact. We use the Lasso regression, as it can do automatic feature selection and prevent over-fitting. We also implement 10-fold cross validation to find the optimal lambda value in the Lasso model. This helps to learn a regression model that captures interaction terms' relationship fairly and generalizes well. 
 
-    -   Children: Each additional child is associated with an increase
-        in costs ($\beta \approx 0.106$).
-
-    -   Sex: Males have slightly lower predicted costs than females
-        ($\beta \approx -0.083$), holding all else constant.
-
-    -   Region: Residents in the Southeast and Southwest have
-        significantly lower costs compared to the reference region
-        (Northeast or Northwest).
+The cv result shows that lambda.min is 0.000442, and it leads to 32 nonzero features. lambda.1se is 0.011482, and it leads to less nonzero features(=14), as the larger lambda values increase the L1 penalty and shrink more coefficients toward zero. Also, the cv MSE of lambda.min is smaller than lambda.1se.
 
 ```{r}
-results <- data.frame(preds = expm1(test_pred_fs), actual = expm1(test_set$charges) )
-results$residuals <- results$actual - results$preds
+library(glmnet)
+set.seed(123)
 
-# Prediction vs Actual
-PvA_fs <- ggplot(results, aes(x = preds, y = actual)) +
-  geom_point(alpha = 0.5) +
-  geom_abline(color = "red") +
-  theme_minimal() +
-  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
-  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
-  labs(title = "Prediction vs Actual")
+x_train <- model.matrix(charges ~ (.)^2, data = train)[, -1]
+y_train <- train$charges
+x_test <- model.matrix(charges ~ (.)^2, data = test)[,-1]
+y_test <- test$charges
 
-# Prediction vs Residuals
-PvR_fs <- ggplot(results, aes(x = preds, y = residuals)) +
-  geom_point(alpha = 0.5) +
-  geom_hline(yintercept = 0, color = "red") +
-  theme_minimal() +
-  scale_x_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
-  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_short_scale()))+
-  labs(title = "Prediction vs Residuals")
+cv_lasso <- cv.glmnet(
+  x = x_train,
+  y = y_train,
+  alpha = 1,        # Lasso
+  nfolds = 10,
+  standardize = TRUE
+)
 
-PvA_fs
-PvR_fs
+lambda_min <- cv_lasso$lambda.min
+lambda_1se <- cv_lasso$lambda.1se
+cv_lasso
+#cat("Best lambda: ", lambda_min, '\n')
+#coef(cv_lasso, s = lambda_min)           # this shows coefficients estimates
+#cat("1se lambda: ", lambda_1se, '\n')
+#coef(cv_lasso, s = lambda_1se)
+```
+```{r}
+plot(cv_lasso)
+```
+**Result**
+The Lasso regression model using lambda.min has smaller Train RMSE(5128.832<5541.604) and Test RMSE(5231.194<5730.521) than using lambda.1se. Also, lambda.min's model has larger Train/Test R^2 than that of lambda.1se's model. I think this is because smaller lambda values can result in a more complex regression model and it can learn more complex and crucial pattern of the data, and therefore reduce the predictive error. 
+
+```{r lasso-cv-performance}
+# Predictions for CV-selected lambda.1se: 	
+# largest value of lambda such that error is within 1 standard error of the minimum.
+train_pred_cv <- predict(cv_lasso, newx = x_train, s = "lambda.1se")
+test_pred_cv  <- predict(cv_lasso, newx = x_test,  s = "lambda.1se")
+
+# Compute R^2
+R2_train_2way_lasso <- computeR2(y_train, train_pred_cv, TRUE)
+R2_test_2way_lasso  <- computeR2(y_test, test_pred_cv, TRUE)
+
+# Compute RMSE
+RMSE_train_2way_lasso <- computeRMSE(y_train, train_pred_cv, TRUE)
+RMSE_test_2way_lasso  <- computeRMSE(y_test, test_pred_cv, TRUE)
+cat('Select lambda.1se (λ =',lambda_1se,')\n')
+cat('Train R^2:',R2_train_2way_lasso,'\n')
+cat('Test R^2:',R2_test_2way_lasso,'\n')
+cat('Train RMSE:',RMSE_train_2way_lasso,'\n')
+cat('Test RMSE:',RMSE_test_2way_lasso,'\n')
+###########################################
+# Predictions for CV-selected lambda.min
+train_pred_cv <- predict(cv_lasso, newx = x_train, s = "lambda.min")
+test_pred_cv  <- predict(cv_lasso, newx = x_test,  s = "lambda.min")
+
+# Compute R^2
+R2_train_2way_lasso <- computeR2(y_train, train_pred_cv, TRUE)
+R2_test_2way_lasso  <- computeR2(y_test, test_pred_cv, TRUE)
+
+# Compute RMSE
+RMSE_train_2way_lasso <- computeRMSE(y_train, train_pred_cv, TRUE)
+RMSE_test_2way_lasso  <- computeRMSE(y_test, test_pred_cv, TRUE)
+cat('\nSelect lambda.min (λ =',lambda_min,')\n')
+cat('Train R^2:',R2_train_2way_lasso,'\n')
+cat('Test R^2:',R2_test_2way_lasso,'\n')
+cat('Train RMSE:',RMSE_train_2way_lasso,'\n')
+cat('Test RMSE:',RMSE_test_2way_lasso,'\n')
+```
+
+```{r}
+coef(cv_lasso, s = lambda_min)
+```
+```{r}
+feat =  c('age',                            
+'sexmale' ,                       
+'bmi'      ,                      
+'children'  ,                     
+'smokeryes'  ,                    
+'regionnorthwest',                
+'regionsouthwest'  ,              
+'age:sexmale'       ,             
+'age:bmi'            ,            
+'age:children'        ,           
+'age:smokeryes'        ,          
+'age:regionnorthwest'   ,         
+'age:regionsoutheast'    ,        
+'age:regionsouthwest'     ,       
+'sexmale:bmi'              ,      
+'sexmale:children'          ,     
+'sexmale:smokeryes'          ,    
+'sexmale:regionnorthwest'     ,   
+'sexmale:regionsoutheast'      ,  
+'sexmale:regionsouthwest'       , 
+'bmi:children'                   ,
+'bmi:smokeryes'                  ,
+'bmi:regionnorthwest'            ,
+'bmi:regionsoutheast'            ,
+'bmi:regionsouthwest'            ,
+'children:smokeryes'             ,
+'children:regionnorthwest'       ,
+'children:regionsoutheast'       ,
+'children:regionsouthwest'       ,
+'smokeryes:regionnorthwest'      ,
+'smokeryes:regionsoutheast'      ,
+'smokeryes:regionsouthwest'      )
+
+form_fs_lasso <- as.formula(
+  paste(response_var, "~", paste(feat, collapse = "+"))
+)
+lm_fs_lasso <- lm(form_fs_lasso,data = train_set)
+summary(lm_fs_lasso)
 ```
 
 ### 3.2 Tree-based Model (Non-parametric)
@@ -1823,9 +1785,9 @@ reached its performance ceiling with the current feature set.
 
 ```{r}
 model_results <- data.frame(
-  Model = c("OLS baseline","Lasso (CV λ_min)","Lasso (BIC)","Feature Selection", "Random Forest", "XGBoost"), 
-  R2_test = c(R2_test_lm, R2_test_cv_base, R2_test_bic_base, R2_test_fs, rf_test_R2, r_sq),
-  RMSE_test = c(RMSE_test_lm, RMSE_test_cv_base, RMSE_test_bic_base, RMSE_test_fs, rf_test_rmse, rmse)
+  Model = c("OLS baseline","Lasso (CV λ_min)","Lasso (BIC)","Feature Selection (2 interactions)", "Feature Selection (all interactions)", "Random Forest", "XGBoost"), 
+  R2_test = c(R2_test_lm, R2_test_cv_base, R2_test_bic_base, R2_test_fs2, R2_train_2way_lasso, rf_test_R2, r_sq),
+  RMSE_test = c(RMSE_test_lm, RMSE_test_cv_base, RMSE_test_bic_base, RMSE_test_fs2, RMSE_test_2way_lasso, rf_test_rmse, rmse)
 )
 
 model_results
