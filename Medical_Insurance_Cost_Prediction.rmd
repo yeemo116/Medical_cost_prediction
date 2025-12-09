@@ -1249,22 +1249,22 @@ test_pred_fs  <- predict(lm_fs, newdata = test_set)
 y_train <- train$charges
 y_test  <- test$charges
 
-R2_train <- computeR2(train_pred_fs, y_train, TRUE)
+R2_train_fs <- computeR2(train_pred_fs, y_train, TRUE)
 #  1 - sum((y_train - train_pred)^2) / sum((y_train - mean(y_train))^2)
-R2_test  <- computeR2(test_pred_fs, y_test, TRUE) 
+R2_test_fs  <- computeR2(test_pred_fs, y_test, TRUE) 
 #  1 - sum((y_test - test_pred_fs)^2) / sum((y_test - mean(y_test))^2)
 
 # Compute RMSE
-RMSE_train <- computeRMSE(train_pred_fs, y_train, TRUE)
-RMSE_test  <- computeRMSE(test_pred_fs, y_test, TRUE)
+RMSE_train_fs <- computeRMSE(train_pred_fs, y_train, TRUE)
+RMSE_test_fs  <- computeRMSE(test_pred_fs, y_test, TRUE)
 
-cat('Train R^2:',R2_train,'\n')
-cat('Test R^2:',R2_test,'\n')
-cat('Train RMSE:',RMSE_train,'\n')
-cat('Test RMSE:',RMSE_test,'\n')
+cat('Train R^2:',R2_train_fs,'\n')
+cat('Test R^2:',R2_test_fs,'\n')
+cat('Train RMSE:',RMSE_train_fs,'\n')
+cat('Test RMSE:',RMSE_test_fs,'\n')
 ```
 
-###### Model Conclusion
+##### Model Conclusion
 
 Overall Model Performance The linear regression model fits the data
 well, explaining approximately 81.4% of the variance in the
@@ -1344,7 +1344,7 @@ variable. Because they don't rely on data distributional assumptions,
 these methods are generally more robust in the presence of outliers.
 Therefore, we apply tree-based models to effectively capture the
 non-linear and complex relationships in our dataset. In this section, we
-compare performance of two tree-based models. In particular, we will
+apply two tree-based models. In particular, we will
 train random forest and XGBoost models, representing aggregation and
 boosting methods, respectively. Later, we will also compare the
 performance of the best non-parametric model(from the tree-based models)
@@ -1418,8 +1418,11 @@ rf_cv <- train(
 rf_cv
 
 # Variable Importance
-varImp(rf_cv)
+rf_vimp <- varImp(rf_cv)
 
+rf_vimp
+
+plot(rf_vimp , main = "RF Variable Importance", xlab = "Importance (%)", ylab = "Features")
 ```
 
 Based on the result, the optimal number of features for the RF model is
@@ -1505,8 +1508,8 @@ In the plot of Predictions vs. Actual values, the points generally
 follow a 45-degree line, indicating good agreement between predicted and
 actual values. In the plot of Predictions vs. Residuals, most points are
 distributed near a horizontal line, suggesting that the residuals are
-randomly scattered around zero. We can say the performance of RF model
-is quite well.
+randomly scattered around zero. 
+The performance of the RF model is quite good.
 
 #### 3.2.2 XGBoost
 
@@ -1816,6 +1819,19 @@ costs are driven by aleatoric uncertainty—likely due to random, acute
 medical events (e.g., accidents or sudden critical illnesses) that
 cannot be predicted by demographic data alone. The model has likely
 reached its performance ceiling with the current feature set.
+
+### Model Comparison
+
+```{r}
+model_results <- data.frame(
+  Model = c("OLS baseline","Lasso (CV λ_min)","Lasso (BIC)","Feature Selection", "Random Forest", "XGBoost"), 
+  R2_test = c(R2_test_lm, R2_test_cv_base, R2_test_bic_base, R2_test_fs, rf_test_R2, r_sq),
+  RMSE_test = c(RMSE_test_lm, RMSE_test_cv_base, RMSE_test_bic_base, RMSE_test_fs, rf_test_rmse, rmse)
+)
+
+model_results
+```
+
 
 ## 4. Application
 
