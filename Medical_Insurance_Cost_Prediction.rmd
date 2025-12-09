@@ -74,7 +74,8 @@ and long-term financial planning.
 
 Through these analyses, our goal is to assess both the interpretability
 and predictive capability of different statistical learning methods.
-\### 1.2 About Dataset
+
+### 1.2 About Dataset
 
 The dataset used in this study is the widely referenced *Medical
 Insurance* dataset from Kaggle, consisting of **2,706 observations and 7
@@ -233,6 +234,7 @@ for (page in 1:num_pages) {
 
 
 ```
+The histograms show that age is roughly uniformly distributed, while BMI follows a slightly right-skewed bell shape. The number of children is heavily concentrated in the 0–2 range. Medical charges exhibit a strong right skew with many low-cost individuals and a long tail of high-cost cases, suggesting that log-transformation may be helpful. The barplots indicate that sex and region are well balanced, whereas smoking status is highly imbalanced, with far fewer smokers—yet smokers typically incur substantially higher charges, making this variable highly predictive.
 
 ```{r}
 # Assuming your dataset is named 'Insurance'
@@ -269,8 +271,10 @@ p_qq_charges <- ggplot(Insurance_view, aes(sample = log1p(charges))) +
 
 # Display Q-Q Plots
 grid.arrange(p_qq_bmi, p_qq_charges, ncol = 2)
+```
+The Q-Q plot for BMI shows mild deviation from normality mainly in the upper tail, indicating a slightly right-skewed distribution. After applying log1p transformation to medical charges, the Q-Q plot aligns much more closely with the theoretical normal line, although minor deviations remain at the extremes. This confirms that log transformation effectively reduces heavy skewness and stabilizes variance in charges.
 
-
+```{r}
 # ============================
 # 2. Pie Charts (For categorical variables)
 # ============================
@@ -309,6 +313,7 @@ pie_region <- draw_pie_chart(Insurance_view, "region")
 grid.arrange(pie_sex, pie_smoker, pie_region,
              layout_matrix = rbind(c(1, 2), c(3, 3)))
 ```
+The pie charts show that sex is almost evenly split between male and female, indicating a balanced sample. Smoking status is highly imbalanced, with only about 20% smokers, but this minority group is known to have much higher medical costs. The four regions are distributed fairly evenly, showing no major geographic sampling bias.
 
 ### 2.3. Bivariate Analysis
 
@@ -336,8 +341,10 @@ cor_table <- cor_table[order(abs(cor_table$corr), decreasing = TRUE), ]
 
 # correlation coefficients table
 cor_table
+```
+The correlation table shows that age has the strongest positive correlation with medical charges, followed by BMI, while the number of children has only a weak relationship with charges. These results indicate that age and BMI are more informative predictors, whereas children contributes relatively little linear explanatory power.
 
-
+```{r}
 # ---- Correlation Heatmap ----
 #top20_feature <- cor_table[1:20, ]$feature
 
@@ -351,6 +358,7 @@ corrplot(corr_mat, method = "color",
          addCoef.col = "black")
 
 ```
+The heatmap confirms that medical charges have the strongest linear relationship with age and BMI, while children shows only a very weak correlation. The predictors themselves exhibit low inter-correlation, suggesting minimal multicollinearity and indicating that each variable provides mostly independent information.
 
 ```{r}
 # ============================
@@ -389,6 +397,7 @@ p4 <- plot_box(Insurance_view, "children", "charges", "Spectral")
 
 grid.arrange(p1, p2, p3, p4, ncol = 2)
 ```
+The boxplots show that smokers have substantially higher medical charges than non-smokers, making smoking status the strongest categorical predictor. Sex has only a small difference in median charges, and regional differences are minimal. The number of children also shows no clear trend, indicating limited influence on charges compared to other factors.
 
 ### 2.4 Analysis of Interaction Effects
 
@@ -410,6 +419,7 @@ p_bmi_smoker <- ggplot(Insurance_view, aes(x = bmi, y = charges, color = smoker)
 
 p_bmi_smoker
 ```
+The interaction plot shows that among smokers, higher BMI is strongly associated with higher medical charges, reflected by the steep positive slope. In contrast, non-smokers show almost no relationship between BMI and charges. This indicates a strong interaction effect: BMI matters much more for smokers, making the combined effect of BMI and smoking highly predictive.
 
 ```{r}
 # ============================
@@ -425,6 +435,7 @@ log_p_bmi_smoker <- ggplot(Insurance_view, aes(x = bmi, y = log_charges, color =
   theme(legend.position = "top")
 log_p_bmi_smoker
 ```
+After applying the log1p transformation, the interaction pattern remains clear: smokers show a strong positive relationship between BMI and medical costs, while non-smokers exhibit a nearly flat trend. The transformation reduces the influence of extreme values but preserves the interaction, confirming that BMI affects smokers much more than non-smokers.
 
 ```{r}
 # ============================
@@ -441,6 +452,7 @@ p_age_smoker <- ggplot(Insurance_view, aes(x = age, y = charges, color = smoker)
 
 p_age_smoker
 ```
+The interaction plot shows that charges increase with age for both smokers and non-smokers, but smokers consistently incur much higher costs at every age level. Although the slopes are similar, the vertical gap between the two groups indicates a strong additive effect of smoking, meaning smoking elevates medical charges regardless of age.
 
 ```{r}
 # ============================
@@ -457,6 +469,7 @@ log_p_age_smoker <- ggplot(Insurance_view, aes(x = age, y = log_charges, color =
 
 log_p_age_smoker
 ```
+After log transformation, the interaction pattern becomes clearer: medical costs increase steadily with age for both groups, but smokers consistently remain at a higher cost level across all ages. The nearly parallel lines show that aging raises costs similarly for smokers and non-smokers, while smoking adds a strong upward shift regardless of age.
 
 ```{r}
 # ============================
@@ -482,6 +495,7 @@ p_bmi_age <- ggplot(Insurance_view, aes(x = bmi, y = charges, color = age_group)
 
 p_bmi_age
 ```
+The interaction plot shows that medical charges increase with BMI across all age groups, but older individuals generally incur higher costs at any BMI level. The senior group has the highest cost baseline, followed by the middle-aged group, while the young group remains lowest. Although the slopes are similar, the vertical separation indicates that age amplifies overall medical costs independently of BMI.
 
 ```{r}
 # ============================
@@ -499,6 +513,7 @@ p_bmi_age <- ggplot(Insurance_view, aes(x = bmi, y = log_charges, color = age_gr
 
 p_bmi_age
 ```
+After log transformation, the three age groups remain clearly separated, with seniors consistently showing the highest cost levels, followed by the middle group and then the young group. All groups show a mild upward trend with BMI, but the vertical gaps dominate the pattern, indicating that age contributes more strongly to cost differences than BMI does. The log transformation reduces extreme variation but preserves the overall interaction structure.
 
 ## 3. Method
 
@@ -1873,9 +1888,10 @@ In this study, we developed and evaluated a series of statistical
 learning models to predict medical insurance costs.
 
 -   Exploratory Analysis: We identified that the distribution of medical
-    charges is highly right-skewed and heteroscedastic. Key interaction
-    effects, particularly between smoking status and BMI, were found to
-    be the strongest drivers of cost escalation.
+    charges is highly right-skewed and heteroscedastic, which makes prediction 
+    more challenging. The main features that affect medical insurance are 
+    smoking, BMI, and age. Key interaction effects, particularly between smoking 
+    status and BMI, were found to be the strongest drivers of cost escalation.
 
 -   Model Evolution: We progressed from baseline Linear Regression (OLS)
     to regularized methods (Lasso), and finally to non-linear tree-based
