@@ -78,7 +78,7 @@ and predictive capability of different statistical learning methods.
 ### 1.2 About Dataset
 
 The dataset used in this study is the widely referenced *Medical
-Insurance* dataset from Kaggle, consisting of **2,706 observations and 7
+Insurance* dataset from Kaggle, consisting of **2,772 observations and 7
 variables**. Each row represents one insured individual, and the
 variables describe demographic information, lifestyle factors, and the
 corresponding medical insurance charges. The dataset is commonly used as
@@ -352,9 +352,8 @@ The correlation table shows that age has the strongest positive correlation with
 corr_mat <- cor(Insurance[cor_table$feature], use = "complete.obs")
 
 corrplot(corr_mat, method = "color",
-         tl.cex = 0.5,
          tl.col = "black",
-         number.cex = 0.4,
+         
          addCoef.col = "black")
 
 ```
@@ -1350,7 +1349,7 @@ boosting methods, respectively. Later, we will also compare the
 performance of the best non-parametric model(from the tree-based models)
 with the best parametric model from the previous section.
 
--   Data Setup
+- Data Setup
 
 ```{r}
 # --- Variable Setup ---
